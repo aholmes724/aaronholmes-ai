@@ -1,46 +1,54 @@
-# Astro Starter Kit: Basics
+# Aaron Holmes
 
-```sh
-npm create astro@latest -- --template basics
+Personal website, portfolio, and learning platform built with Astro.
+
+## Goals
+
+This site serves several purposes:
+
+- Showcase automation and software projects
+- Document technical work and learning
+- Publish articles and notes
+- Host interactive learning tools
+- Experiment with modern web technologies
+
+## Tech Stack
+
+- Astro
+- TypeScript (planned)
+- Cloudflare
+- GitHub
+- GitHub Actions (planned)
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+Run the development server:
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
+```bash
+npm run dev
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+Open:
 
-## 🧞 Commands
+```
+http://localhost:4321
+```
 
-All commands are run from the root of the project, from a terminal:
+## Roadmap
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+- [ ] Design homepage
+- [ ] Build portfolio section
+- [ ] Create project pages
+- [ ] Add blog
+- [ ] Build learning app
+- [ ] Turn learning app into a Progressive Web App (PWA)
 
-## 👀 Want to learn more?
+## License
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+MIT
