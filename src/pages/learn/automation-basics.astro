@@ -1,5 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import QuizQuestion from '../../components/QuizQuestion.astro';
 ---
 
 <Layout title="Automation Basics | Aaron Holmes">
@@ -13,50 +14,19 @@ import Layout from '../../layouts/Layout.astro';
 			human intervention.
 		</p>
         <a href="/learn">Back to Learn</a>
-        <section>
-	<h2>Quick check</h2>
-
-	<p>Which example is automation?</p>
-
-	<button id="manual-answer" type="button">
-	A person manually copying data between two systems
-</button>
-	<button id="automation-answer" type="button">
-	A workflow automatically creating a CRM record from a form submission
-</button>
-<p id="feedback" aria-live="polite"></p>
-</section>
+        <QuizQuestion
+	question="Which example is automation?"
+	incorrectAnswer="A person manually copying data between two systems"
+	correctAnswer="A workflow automatically creating a CRM record from a form submission"
+	incorrectFeedback="Not quite. A person is still performing the task manually."
+	correctFeedback="Correct! The workflow performs the task automatically."
+/>
+		<QuizQuestion
+	question="What is the main benefit of automation?"
+	incorrectAnswer="It guarantees that a process can never fail"
+	correctAnswer="It reduces repetitive manual work"
+	incorrectFeedback="Not quite. Automated processes can still fail and need monitoring."
+	correctFeedback="Correct! Reducing repetitive manual work is one of automation's primary benefits."
+/>
 	</main>
 </Layout>
-<script>
-	const manualAnswer =
-	document.querySelector<HTMLButtonElement>('#manual-answer');
-
-const automationAnswer =
-	document.querySelector<HTMLButtonElement>('#automation-answer');
-	const feedback = document.querySelector('#feedback');
-
-	manualAnswer?.addEventListener('click', () => {
-	if (feedback) {
-		feedback.textContent =
-			'Not quite. A person is still performing the task manually.';
-	}
-
-	if (manualAnswer && automationAnswer) {
-		manualAnswer.disabled = true;
-		automationAnswer.disabled = true;
-	}
-});
-
-	automationAnswer?.addEventListener('click', () => {
-		if (feedback) {
-			feedback.textContent =
-				'Correct! The workflow performs the task automatically.';
-		}
-
-        if (manualAnswer && automationAnswer) {
-	        manualAnswer.disabled = true;
-	        automationAnswer.disabled = true;
-}
-	});
-</script>

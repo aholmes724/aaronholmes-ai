@@ -1,0 +1,63 @@
+---
+interface Props {
+	question: string;
+	correctAnswer: string;
+	incorrectAnswer: string;
+	correctFeedback: string;
+	incorrectFeedback: string;
+}
+
+const {
+	question,
+	correctAnswer,
+	incorrectAnswer,
+	correctFeedback,
+	incorrectFeedback,
+} = Astro.props;
+---
+<section
+	class="quiz-question"
+	data-correct-feedback={correctFeedback}
+	data-incorrect-feedback={incorrectFeedback}
+>
+	<h2>{question}</h2>
+
+	<button type="button" data-answer="incorrect">
+		{incorrectAnswer}
+	</button>
+
+	<button type="button" data-answer="correct">
+		{correctAnswer}
+	</button>
+
+	<p class="feedback" aria-live="polite"></p>
+</section>
+<script>
+	const quizzes =
+		document.querySelectorAll<HTMLElement>('.quiz-question');
+
+	quizzes.forEach((quiz) => {
+		const buttons =
+			quiz.querySelectorAll<HTMLButtonElement>('button');
+
+		const feedback =
+			quiz.querySelector<HTMLElement>('.feedback');
+
+		buttons.forEach((button) => {
+			button.addEventListener('click', () => {
+				if (!feedback) return;
+
+				const isCorrect =
+					button.dataset.answer === 'correct';
+
+				feedback.textContent = isCorrect
+					? quiz.dataset.correctFeedback ?? 'Correct.'
+					: quiz.dataset.incorrectFeedback ?? 'Not quite.';
+
+				buttons.forEach((quizButton) => {
+					quizButton.disabled = true;
+				});
+			});
+		});
+	});
+</script>
