@@ -1,0 +1,80 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import QuizQuestion from "../../components/QuizQuestion.astro";
+import { apiBasicsQuestions } from "../../data/questions";
+---
+
+<Layout title="API Basics | Aaron Holmes">
+    <main class="container">
+        <a href="/learn">← Back to Learn</a>
+
+        <h1>API Basics</h1>
+
+        <p>
+            APIs allow different software systems to communicate with each
+            other. Understanding them is an important part of building and
+            troubleshooting automations.
+        </p>
+        <section>
+            <h2>What is an API?</h2>
+
+            <p>
+                API stands for Application Programming Interface. An API
+                provides a structured way for one application to request
+                information or actions from another application.
+            </p>
+
+            <p>
+                For example, an automation platform might use a CRM's API to
+                create a new contact without a person opening the CRM and
+                entering the contact manually.
+            </p>
+        </section>
+
+        <section>
+            <h2>Request and response</h2>
+
+            <p>
+                Most API interactions can be thought of as a conversation
+                between two systems:
+            </p>
+
+            <ol>
+                <li>
+                    Your application sends a <strong>request</strong> to an API.
+                </li>
+                <li>The API processes the request.</li>
+                <li>The API sends back a <strong>response</strong>.</li>
+            </ol>
+
+            <p>
+                For example, an automation could send a request asking a CRM to
+                create a new contact. The CRM might respond with the newly
+                created contact's ID and other information.
+            </p>
+        </section>
+
+        <section>
+            <h2>Endpoints</h2>
+
+            <p>
+                An endpoint is a specific location in an API where a request can
+                be sent. Different endpoints usually perform different actions
+                or work with different types of data.
+            </p>
+
+            <p>
+                For example, a CRM API might have one endpoint for contacts and
+                another for deals.
+            </p>
+
+            <pre><code>https://api.example-crm.com/contacts</code></pre>
+
+            <p>
+                Think of the API as the building and an endpoint as a specific
+                door. Which door you use depends on what you want to do.
+            </p>
+        </section>
+        <QuizQuestion question={apiBasicsQuestions[0]} />
+    </main>
+</Layout>

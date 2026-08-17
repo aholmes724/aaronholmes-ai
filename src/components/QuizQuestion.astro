@@ -1,24 +1,5 @@
 ---
-interface Answer {
-    id: string;
-    text: string;
-    correct: boolean;
-    feedback: string;
-}
-
-interface Question {
-    id: string;
-    type: "single-select" | "multi-select";
-    prompt: string;
-    answers: Answer[];
-
-    topic?: string;
-    difficulty?: "beginner" | "intermediate" | "advanced";
-    explanation?: string;
-    sourceId?: string;
-    sourceReference?: string;
-    shuffleAnswers?: boolean;
-}
+import type { Question } from "../data/questions";
 
 interface Props {
     question: Question;

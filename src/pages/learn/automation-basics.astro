@@ -1,6 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import QuizQuestion from "../../components/QuizQuestion.astro";
+import { automationBasicsQuestions } from "../../data/questions";
 ---
 
 <Layout title="Automation Basics | Aaron Holmes">
@@ -14,57 +15,7 @@ import QuizQuestion from "../../components/QuizQuestion.astro";
 			reduced human intervention.
 		</p>
 		<a href="/learn">Back to Learn</a>
-		<QuizQuestion
-			question={{
-				id: "automation-basics-1",
-				type: "single-select",
-				prompt: "Which example is automation?",
-				topic: "automation",
-				difficulty: "beginner",
-				shuffleAnswers: true,
-				answers: [
-					{
-						id: "a",
-						text: "A person manually copying data between two systems",
-						correct: false,
-						feedback:
-							"Not quite. A person is still performing the task manually.",
-					},
-					{
-						id: "b",
-						text: "A workflow automatically creating a CRM record from a form submission",
-						correct: true,
-						feedback:
-							"Correct! The workflow performs the task automatically.",
-					},
-				],
-			}}
-		/>
-		<QuizQuestion
-			question={{
-				id: "automation-basics-2",
-				type: "single-select",
-				prompt: "What is the main benefit of automation?",
-				topic: "automation",
-				difficulty: "beginner",
-				shuffleAnswers: true,
-				answers: [
-					{
-						id: "a",
-						text: "It guarantees that a process can never fail",
-						correct: false,
-						feedback:
-							"Not quite. Automated processes can still fail and need monitoring.",
-					},
-					{
-						id: "b",
-						text: "It reduces repetitive manual work",
-						correct: true,
-						feedback:
-							"Correct! Reducing repetitive manual work is one of automation’s primary benefits.",
-					},
-				],
-			}}
-		/>
+		<QuizQuestion question={automationBasicsQuestions[0]} />
+		<QuizQuestion question={automationBasicsQuestions[1]} />
 	</main>
 </Layout>

@@ -98,3 +98,42 @@ img {
 	border-color: #b84a4a;
 	background: #fbefef;
 }
+
+.lesson-card {
+	display: block;
+	padding: 1.25rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--surface);
+	text-decoration: none;
+}
+
+.lesson-card:hover {
+	border-color: var(--accent);
+}
+
+.lesson-card h2 {
+	margin-top: 0;
+	margin-bottom: 0.5rem;
+}
+
+.lesson-card p {
+	margin: 0 0 1rem;
+	color: var(--text-muted);
+}
+
+.lesson-card span {
+	font-weight: 600;
+}
+
+.lesson-grid {
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 700px) {
+	.lesson-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

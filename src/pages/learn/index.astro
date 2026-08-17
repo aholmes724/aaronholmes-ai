@@ -1,10 +1,27 @@
 ---
-import Layout from '../../layouts/Layout.astro';
+import Layout from "../../layouts/Layout.astro";
 ---
 
 <Layout title="Learn | Aaron Holmes">
 	<main class="container">
 		<h1>Learn</h1>
-        <a href="/learn/automation-basics">Automation Basics</a>
+		<div class="lesson-grid">
+			<a class="lesson-card" href="/learn/automation-basics">
+				<h2>Automation Basics</h2>
+				<p>
+					Learn what automation is, how workflows work, and where
+					automation can save time.
+				</p>
+				<span>Start lesson →</span>
+			</a>
+			<a class="lesson-card" href="/learn/api-basics">
+				<h2>API Basics</h2>
+				<p>
+					Learn what APIs are, how requests and responses work, and
+					why they matter in automation.
+				</p>
+				<span>Start lesson →</span>
+			</a>
+		</div>
 	</main>
 </Layout>
