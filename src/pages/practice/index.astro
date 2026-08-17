@@ -1,0 +1,97 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import QuizQuestion from "../../components/QuizQuestion.astro";
+import {
+    automationBasicsQuestions,
+    apiBasicsQuestions,
+} from "../../data/questions";
+
+const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
+
+const selectedTopic = Astro.url.searchParams.get("topic");
+
+const filteredQuestions = selectedTopic
+    ? practiceQuestions.filter((question) => question.topic === selectedTopic)
+    : practiceQuestions;
+
+const sessionQuestions = [...filteredQuestions]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 5);
+---
+
+<Layout title="Practice | Aaron Holmes">
+    <main class="container">
+        <a href="/learn">← Back to Learn</a>
+
+        <h1>Practice</h1>
+
+        <nav class="practice-filters" aria-label="Practice topics">
+            <button type="button" data-topic-filter="all">All topics</button>
+            <button type="button" data-topic-filter="automation"
+                >Automation</button
+            >
+            <button type="button" data-topic-filter="api">API</button>
+        </nav>
+
+        <p>
+            Review questions across topics without going through the full
+            lessons.
+        </p>
+
+        <p>
+            <strong id="visible-question-count"
+                >{sessionQuestions.length}</strong
+            > questions in this practice session
+        </p>
+
+        <p>
+            <a class="new-session-button" href="/practice">New session</a>
+        </p>
+
+        {
+            sessionQuestions.map((question) => (
+                <QuizQuestion question={question} />
+            ))
+        }
+    </main>
+</Layout>
+
+<script>
+    const filterButtons = document.querySelectorAll<HTMLButtonElement>(
+        "[data-topic-filter]",
+    );
+
+    const questions = document.querySelectorAll<HTMLElement>(".quiz-question");
+
+    const visibleQuestionCount = document.querySelector<HTMLElement>(
+        "#visible-question-count",
+    );
+    filterButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const selectedTopic = button.dataset.topicFilter;
+
+            filterButtons.forEach((filterButton) => {
+                filterButton.classList.remove("active");
+            });
+
+            button.classList.add("active");
+
+            questions.forEach((question) => {
+                const matchesTopic =
+                    selectedTopic === "all" ||
+                    question.dataset.topic === selectedTopic;
+
+                question.hidden = !matchesTopic;
+            });
+
+            if (visibleQuestionCount) {
+                const visibleQuestions = Array.from(questions).filter(
+                    (question) => !question.hidden,
+                );
+
+                visibleQuestionCount.textContent =
+                    visibleQuestions.length.toString();
+            }
+        });
+    });
+</script>

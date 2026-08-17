@@ -10,6 +10,7 @@ const { question } = Astro.props;
 
 <section
     class="quiz-question"
+    data-topic={question.topic}
     data-shuffle-answers={question.shuffleAnswers ?? true}
 >
     <h2>{question.prompt}</h2>
