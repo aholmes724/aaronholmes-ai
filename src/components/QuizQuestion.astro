@@ -15,6 +15,8 @@ interface Question {
     topic?: string;
     difficulty?: "beginner" | "intermediate" | "advanced";
     explanation?: string;
+    sourceId?: string;
+    sourceReference?: string;
     shuffleAnswers?: boolean;
 }
 
@@ -34,14 +36,17 @@ const { question } = Astro.props;
     <div class="answers">
         {
             question.answers.map((answer) => (
-                <button
-                    type="button"
-                    data-answer-id={answer.id}
-                    data-correct={answer.correct}
-                    data-feedback={answer.feedback}
-                >
-                    {answer.text}
-                </button>
+                <label class="answer-option">
+                    <input
+                        type="radio"
+                        name={`question-${question.id}`}
+                        value={answer.id}
+                        data-answer-id={answer.id}
+                        data-correct={answer.correct}
+                        data-feedback={answer.feedback}
+                    />
+                    <span>{answer.text}</span>
+                </label>
             ))
         }
     </div>
@@ -53,17 +58,18 @@ const { question } = Astro.props;
     const quizzes = document.querySelectorAll<HTMLElement>(".quiz-question");
 
     quizzes.forEach((quiz) => {
-        const buttons = quiz.querySelectorAll<HTMLButtonElement>(
-            "button[data-answer-id]",
+        const answers = quiz.querySelectorAll<HTMLInputElement>(
+            "input[data-answer-id]",
         );
 
-        const answers = Array.from(buttons);
+        const answerList = Array.from(answers);
 
         if (quiz.dataset.shuffleAnswers === "true") {
-            answers.sort(() => Math.random() - 0.5);
+            answerList.sort(() => Math.random() - 0.5);
 
-            answers.forEach((answer) => {
-                answer.parentElement?.appendChild(answer);
+            answerList.forEach((answer) => {
+                const answerOption = answer.closest(".answer-option");
+                answerOption?.parentElement?.appendChild(answerOption);
             });
         }
 
@@ -71,35 +77,53 @@ const { question } = Astro.props;
 
         const tryAgain = quiz.querySelector<HTMLButtonElement>(".try-again");
 
-        buttons.forEach((button) => {
-            button.addEventListener("click", () => {
+        answers.forEach((answer) => {
+            answer.addEventListener("change", () => {
                 if (!feedback) return;
 
-                const isCorrect = button.dataset.correct === "true";
+                const isCorrect = answer.dataset.correct === "true";
+
+                const answerOption =
+                    answer.closest<HTMLElement>(".answer-option");
+
+                if (answerOption) {
+                    answerOption.dataset.result = isCorrect
+                        ? "correct"
+                        : "incorrect";
+                }
+
                 if (!isCorrect && tryAgain) {
                     tryAgain.hidden = false;
                 }
 
                 feedback.textContent =
-                    button.dataset.feedback ??
+                    answer.dataset.feedback ??
                     (isCorrect ? "Correct." : "Not quite.");
 
-                buttons.forEach((quizButton) => {
-                    quizButton.disabled = true;
-
-                    tryAgain?.addEventListener("click", () => {
-                        buttons.forEach((quizButton) => {
-                            quizButton.disabled = false;
-                        });
-
-                        if (feedback) {
-                            feedback.textContent = "";
-                        }
-
-                        tryAgain.hidden = true;
-                    });
+                answers.forEach((quizAnswer) => {
+                    quizAnswer.disabled = true;
                 });
             });
+        });
+
+        tryAgain?.addEventListener("click", () => {
+            answers.forEach((quizAnswer) => {
+                quizAnswer.disabled = false;
+                quizAnswer.checked = false;
+
+                const answerOption =
+                    quizAnswer.closest<HTMLElement>(".answer-option");
+
+                if (answerOption) {
+                    delete answerOption.dataset.result;
+                }
+            });
+
+            if (feedback) {
+                feedback.textContent = "";
+            }
+
+            tryAgain.hidden = true;
         });
     });
 </script>
