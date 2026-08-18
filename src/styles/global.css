@@ -214,6 +214,10 @@ img {
 	margin-top: 1.5rem;
 }
 
+.practice-complete[hidden] {
+	display: none;
+}
+
 .practice-complete h2 {
 	margin: 0;
 }

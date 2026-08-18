@@ -208,18 +208,18 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
         }
 
         if (totalAnswered === sessionLength) {
-            sessionQuestions[currentQuestionIndex].hidden = true;
             if (finalScore) finalScore.textContent = correctAnswers.toString();
             if (finalAnswered) finalAnswered.textContent = totalAnswered.toString();
             if (finalAccuracy) {
                 finalAccuracy.textContent = `${Math.round((correctAnswers / sessionLength) * 100)}%`;
             }
-            if (sessionComplete) sessionComplete.hidden = false;
-            if (nextQuestion) nextQuestion.hidden = true;
-            if (nextQuestionContainer) nextQuestionContainer.hidden = true;
+            if (nextQuestion) nextQuestion.textContent = "Finish session";
+            if (nextQuestion) nextQuestion.hidden = false;
+            if (nextQuestionContainer) nextQuestionContainer.hidden = false;
             return;
         }
 
+        if (nextQuestion) nextQuestion.textContent = "Next question";
         if (nextQuestion) nextQuestion.hidden = false;
         if (nextQuestionContainer) nextQuestionContainer.hidden = false;
     });
@@ -238,6 +238,14 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
     nextQuestion?.addEventListener("click", () => {
         if (!answeredQuestions.has(sessionQuestions[currentQuestionIndex]
             ?.querySelector<HTMLElement>(".quiz-question")?.dataset.questionId ?? "")) {
+            return;
+        }
+
+        if (currentQuestionIndex === sessionQuestions.length - 1) {
+            sessionQuestions[currentQuestionIndex].hidden = true;
+            nextQuestion.hidden = true;
+            if (nextQuestionContainer) nextQuestionContainer.hidden = true;
+            if (sessionComplete) sessionComplete.hidden = false;
             return;
         }
 
