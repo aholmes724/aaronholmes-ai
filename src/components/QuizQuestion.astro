@@ -3,14 +3,16 @@ import type { Question } from "../data/questions";
 
 interface Props {
     question: Question;
+    mode?: "lesson" | "practice";
 }
-
-const { question } = Astro.props;
+const { question, mode = "lesson" } = Astro.props;
 ---
 
 <section
     class="quiz-question"
+    data-question-id={question.id}
     data-topic={question.topic}
+    data-mode={mode}
     data-shuffle-answers={question.shuffleAnswers ?? true}
 >
     <h2>{question.prompt}</h2>
@@ -36,6 +38,7 @@ const { question } = Astro.props;
     <p class="feedback" aria-live="polite"></p>
     <button class="try-again" type="button" hidden> Try again </button>
 </section>
+
 <script>
     const quizzes = document.querySelectorAll<HTMLElement>(".quiz-question");
 
@@ -65,6 +68,21 @@ const { question } = Astro.props;
 
                 const isCorrect = answer.dataset.correct === "true";
 
+                const questionId = quiz.dataset.questionId;
+
+                const answerId = answer.dataset.answerId;
+
+                quiz.dispatchEvent(
+                    new CustomEvent("question-answered", {
+                        bubbles: true,
+                        detail: {
+                            questionId,
+                            answerId,
+                            correct: isCorrect,
+                        },
+                    }),
+                );
+
                 const answerOption =
                     answer.closest<HTMLElement>(".answer-option");
 
@@ -74,7 +92,11 @@ const { question } = Astro.props;
                         : "incorrect";
                 }
 
-                if (!isCorrect && tryAgain) {
+                if (
+                    !isCorrect &&
+                    tryAgain &&
+                    quiz.dataset.mode !== "practice"
+                ) {
                     tryAgain.hidden = false;
                 }
 

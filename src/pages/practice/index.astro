@@ -8,29 +8,28 @@ import {
 
 const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
 
-const selectedTopic = Astro.url.searchParams.get("topic");
-
-const filteredQuestions = selectedTopic
-    ? practiceQuestions.filter((question) => question.topic === selectedTopic)
-    : practiceQuestions;
-
-const sessionQuestions = [...filteredQuestions]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 5);
 ---
 
 <Layout title="Practice | Aaron Holmes">
-    <main class="container">
+    <main class="container" data-session-length={Math.min(practiceQuestions.length, 5)}>
         <a href="/learn">← Back to Learn</a>
 
         <h1>Practice</h1>
 
         <nav class="practice-filters" aria-label="Practice topics">
-            <button type="button" data-topic-filter="all">All topics</button>
-            <button type="button" data-topic-filter="automation"
-                >Automation</button
+            <button
+                class="active"
+                type="button"
+                data-topic-filter="all">All topics</button
             >
-            <button type="button" data-topic-filter="api">API</button>
+            <button
+                type="button"
+                data-topic-filter="automation">Automation</button
+            >
+            <button
+                type="button"
+                data-topic-filter="api">API</button
+            >
         </nav>
 
         <p>
@@ -38,60 +37,187 @@ const sessionQuestions = [...filteredQuestions]
             lessons.
         </p>
 
-        <p>
-            <strong id="visible-question-count"
-                >{sessionQuestions.length}</strong
-            > questions in this practice session
+        <p id="question-progress" aria-live="polite">
+            Question <strong id="current-question-number">1</strong> of
+            <strong id="session-length">{Math.min(practiceQuestions.length, 5)}</strong>
+        </p>
+
+        <p class="practice-score">
+            Score: <strong id="practice-score">0</strong> /
+            <strong id="answered-count">0</strong>
         </p>
 
         <p>
             <a class="new-session-button" href="/practice">New session</a>
         </p>
 
-        {
-            sessionQuestions.map((question) => (
-                <QuizQuestion question={question} />
-            ))
-        }
+        <div id="practice-questions">
+            {
+                practiceQuestions.map((question) => (
+                    <div hidden data-session-question>
+                        <QuizQuestion question={question} mode="practice" />
+                    </div>
+                ))
+            }
+        </div>
+
+        <p>
+            <button id="next-question" class="new-session-button" type="button" hidden>
+                Next question
+            </button>
+        </p>
+
+        <section id="session-complete" hidden aria-labelledby="complete-heading">
+            <h2 id="complete-heading">Session complete</h2>
+            <p>
+                Final score: <strong id="final-score">0</strong> /
+                <strong id="final-answered">0</strong>
+            </p>
+            <p>Accuracy: <strong id="final-accuracy">0%</strong></p>
+            <a class="new-session-button" href="/practice">New session</a>
+        </section>
     </main>
 </Layout>
 
 <script>
+    const practicePage = document.querySelector<HTMLElement>(
+        "main[data-session-length]",
+    );
+
+    const practiceScore =
+        document.querySelector<HTMLElement>("#practice-score");
+
+    const answeredCount =
+        document.querySelector<HTMLElement>("#answered-count");
+
+    const answeredQuestions = new Set<string>();
+
+    const sessionComplete =
+        document.querySelector<HTMLElement>("#session-complete");
+
+    const nextQuestion =
+        document.querySelector<HTMLButtonElement>("#next-question");
+
+    const currentQuestionNumber = document.querySelector<HTMLElement>(
+        "#current-question-number",
+    );
+
+    const finalScore = document.querySelector<HTMLElement>("#final-score");
+    const finalAnswered =
+        document.querySelector<HTMLElement>("#final-answered");
+    const finalAccuracy =
+        document.querySelector<HTMLElement>("#final-accuracy");
     const filterButtons = document.querySelectorAll<HTMLButtonElement>(
         "[data-topic-filter]",
     );
-
-    const questions = document.querySelectorAll<HTMLElement>(".quiz-question");
-
-    const visibleQuestionCount = document.querySelector<HTMLElement>(
-        "#visible-question-count",
+    const sessionCandidates = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-session-question]"),
     );
+
+    const topic = new URLSearchParams(window.location.search).get("topic");
+    filterButtons.forEach((button) => {
+        button.classList.toggle(
+            "active",
+            (button.dataset.topicFilter ?? "all") === (topic ?? "all"),
+        );
+    });
+
+    const sessionQuestions = sessionCandidates
+        .filter((question) => {
+            return (
+                !topic ||
+                question.querySelector<HTMLElement>(".quiz-question")?.dataset
+                    .topic === topic
+            );
+        })
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 5);
+
+    sessionCandidates.forEach((question) => {
+        const sessionIndex = sessionQuestions.indexOf(question);
+        question.hidden = sessionIndex !== 0;
+    });
+
+    const sessionLength = sessionQuestions.length;
+    const sessionLengthElement = document.querySelector<HTMLElement>(
+        "#session-length",
+    );
+    if (sessionLengthElement) {
+        sessionLengthElement.textContent = sessionLength.toString();
+    }
+
+    let correctAnswers = 0;
+    let totalAnswered = 0;
+    let currentQuestionIndex = 0;
+
+    document.addEventListener("question-answered", (event) => {
+        const customEvent = event as CustomEvent<{
+            questionId?: string;
+            answerId?: string;
+            correct: boolean;
+        }>;
+
+        const questionId = customEvent.detail.questionId;
+
+        if (!questionId || answeredQuestions.has(questionId)) {
+            return;
+        }
+
+        answeredQuestions.add(questionId);
+
+        totalAnswered += 1;
+
+        if (customEvent.detail.correct) {
+            correctAnswers += 1;
+        }
+
+        if (practiceScore) {
+            practiceScore.textContent = correctAnswers.toString();
+        }
+
+        if (answeredCount) {
+            answeredCount.textContent = totalAnswered.toString();
+        }
+
+        if (totalAnswered === sessionLength) {
+            sessionQuestions[currentQuestionIndex].hidden = true;
+            if (finalScore) finalScore.textContent = correctAnswers.toString();
+            if (finalAnswered) finalAnswered.textContent = totalAnswered.toString();
+            if (finalAccuracy) {
+                finalAccuracy.textContent = `${Math.round((correctAnswers / sessionLength) * 100)}%`;
+            }
+            if (sessionComplete) sessionComplete.hidden = false;
+            if (nextQuestion) nextQuestion.hidden = true;
+            return;
+        }
+
+        if (nextQuestion) nextQuestion.hidden = false;
+    });
+
     filterButtons.forEach((button) => {
         button.addEventListener("click", () => {
             const selectedTopic = button.dataset.topicFilter;
 
-            filterButtons.forEach((filterButton) => {
-                filterButton.classList.remove("active");
-            });
-
-            button.classList.add("active");
-
-            questions.forEach((question) => {
-                const matchesTopic =
-                    selectedTopic === "all" ||
-                    question.dataset.topic === selectedTopic;
-
-                question.hidden = !matchesTopic;
-            });
-
-            if (visibleQuestionCount) {
-                const visibleQuestions = Array.from(questions).filter(
-                    (question) => !question.hidden,
-                );
-
-                visibleQuestionCount.textContent =
-                    visibleQuestions.length.toString();
-            }
+            window.location.href =
+                selectedTopic === "all"
+                    ? "/practice"
+                    : `/practice?topic=${encodeURIComponent(selectedTopic ?? "")}`;
         });
+    });
+
+    nextQuestion?.addEventListener("click", () => {
+        if (!answeredQuestions.has(sessionQuestions[currentQuestionIndex]
+            ?.querySelector<HTMLElement>(".quiz-question")?.dataset.questionId ?? "")) {
+            return;
+        }
+
+        sessionQuestions[currentQuestionIndex].hidden = true;
+        currentQuestionIndex += 1;
+        sessionQuestions[currentQuestionIndex].hidden = false;
+
+        if (currentQuestionNumber) {
+            currentQuestionNumber.textContent = (currentQuestionIndex + 1).toString();
+        }
+        nextQuestion.hidden = true;
     });
 </script>
