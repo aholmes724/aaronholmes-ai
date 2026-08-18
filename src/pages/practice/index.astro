@@ -12,7 +12,10 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
 
 <Layout title="Practice | Aaron Holmes">
     <main class="container" data-session-length={Math.min(practiceQuestions.length, 5)}>
-        <a href="/learn">← Back to Learn</a>
+        <div class="practice-links">
+            <a href="/learn">← Back to Learn</a>
+            <a href="/progress">View progress</a>
+        </div>
 
         <h1>Practice</h1>
 
@@ -37,19 +40,21 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             lessons.
         </p>
 
-        <p id="question-progress" aria-live="polite">
-            Question <strong id="current-question-number">1</strong> of
-            <strong id="session-length">{Math.min(practiceQuestions.length, 5)}</strong>
-        </p>
+        <div class="practice-meta">
+            <p id="question-progress" aria-live="polite">
+                <span>Question</span>
+                <strong id="current-question-number">1</strong>
+                <span>of</span>
+                <strong id="session-length">{Math.min(practiceQuestions.length, 5)}</strong>
+            </p>
 
-        <p class="practice-score">
-            Score: <strong id="practice-score">0</strong> /
-            <strong id="answered-count">0</strong>
-        </p>
-
-        <p>
-            <a class="new-session-button" href="/practice">New session</a>
-        </p>
+            <p class="practice-score">
+                <span>Score:</span>
+                <strong id="practice-score">0</strong>
+                <span>/</span>
+                <strong id="answered-count">0</strong>
+            </p>
+        </div>
 
         <div id="practice-questions">
             {
@@ -61,13 +66,18 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             }
         </div>
 
-        <p>
+        <div id="next-question-container" class="practice-actions" hidden>
             <button id="next-question" class="new-session-button" type="button" hidden>
                 Next question
             </button>
-        </p>
+        </div>
 
-        <section id="session-complete" hidden aria-labelledby="complete-heading">
+        <section
+            id="session-complete"
+            class="practice-complete"
+            hidden
+            aria-labelledby="complete-heading"
+        >
             <h2 id="complete-heading">Session complete</h2>
             <p>
                 Final score: <strong id="final-score">0</strong> /
@@ -80,9 +90,7 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
 </Layout>
 
 <script>
-    const practicePage = document.querySelector<HTMLElement>(
-        "main[data-session-length]",
-    );
+    import { savePracticeAttempt } from "../../data/attempts";
 
     const practiceScore =
         document.querySelector<HTMLElement>("#practice-score");
@@ -97,6 +105,9 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
 
     const nextQuestion =
         document.querySelector<HTMLButtonElement>("#next-question");
+    const nextQuestionContainer = document.querySelector<HTMLElement>(
+        "#next-question-container",
+    );
 
     const currentQuestionNumber = document.querySelector<HTMLElement>(
         "#current-question-number",
@@ -158,12 +169,29 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
         }>;
 
         const questionId = customEvent.detail.questionId;
+        const answerId = customEvent.detail.answerId;
 
-        if (!questionId || answeredQuestions.has(questionId)) {
+        if (!questionId || !answerId || answeredQuestions.has(questionId)) {
             return;
         }
 
         answeredQuestions.add(questionId);
+
+        const quiz = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+            ".quiz-question",
+        );
+        const concepts = quiz?.dataset.concepts
+            ?.split(",")
+            .filter(Boolean);
+
+        savePracticeAttempt({
+            questionId,
+            answerId,
+            correct: customEvent.detail.correct,
+            answeredAt: new Date().toISOString(),
+            ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
+            ...(concepts?.length && { concepts }),
+        });
 
         totalAnswered += 1;
 
@@ -188,10 +216,12 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             }
             if (sessionComplete) sessionComplete.hidden = false;
             if (nextQuestion) nextQuestion.hidden = true;
+            if (nextQuestionContainer) nextQuestionContainer.hidden = true;
             return;
         }
 
         if (nextQuestion) nextQuestion.hidden = false;
+        if (nextQuestionContainer) nextQuestionContainer.hidden = false;
     });
 
     filterButtons.forEach((button) => {
@@ -219,5 +249,6 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             currentQuestionNumber.textContent = (currentQuestionIndex + 1).toString();
         }
         nextQuestion.hidden = true;
+        if (nextQuestionContainer) nextQuestionContainer.hidden = true;
     });
 </script>

@@ -1,0 +1,118 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Progress | Aaron Holmes">
+    <main class="container">
+        <a href="/learn">← Back to Learn</a>
+        <h1>Progress</h1>
+        <p>Practice history from this browser.</p>
+
+        <section class="progress-summary" aria-labelledby="summary-heading">
+            <h2 id="summary-heading">Summary</h2>
+            <dl class="progress-stats">
+                <div>
+                    <dt>Total attempts</dt>
+                    <dd id="total-attempts">0</dd>
+                </div>
+                <div>
+                    <dt>Total correct</dt>
+                    <dd id="total-correct">0</dd>
+                </div>
+                <div>
+                    <dt>Overall accuracy</dt>
+                    <dd id="overall-accuracy">0%</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section aria-labelledby="topic-heading">
+            <h2 id="topic-heading">Accuracy by topic</h2>
+            <div id="topic-progress" class="progress-list">
+                <p>No practice attempts yet.</p>
+            </div>
+        </section>
+
+        <section aria-labelledby="concept-heading">
+            <h2 id="concept-heading">Accuracy by concept</h2>
+            <div id="concept-progress" class="progress-list">
+                <p>No concept data yet.</p>
+            </div>
+        </section>
+
+        <p><a class="new-session-button" href="/practice">Practice again</a></p>
+    </main>
+</Layout>
+
+<script>
+    import { readPracticeAttempts } from "../data/attempts";
+
+    const attempts = readPracticeAttempts();
+    const correctAttempts = attempts.filter((attempt) => attempt.correct).length;
+    const accuracy = attempts.length
+        ? Math.round((correctAttempts / attempts.length) * 100)
+        : 0;
+
+    const setText = (id: string, value: string) => {
+        const element = document.querySelector<HTMLElement>(`#${id}`);
+        if (element) element.textContent = value;
+    };
+
+    setText("total-attempts", attempts.length.toString());
+    setText("total-correct", correctAttempts.toString());
+    setText("overall-accuracy", `${accuracy}%`);
+
+    const renderBreakdown = (
+        containerId: string,
+        groups: Map<string, { attempts: number; correct: number }>,
+        emptyMessage: string,
+    ) => {
+        const container = document.querySelector<HTMLElement>(`#${containerId}`);
+        if (!container) return;
+
+        if (!groups.size) {
+            container.innerHTML = `<p>${emptyMessage}</p>`;
+            return;
+        }
+
+        container.replaceChildren(
+            ...Array.from(groups.entries())
+                .sort(([first], [second]) => first.localeCompare(second))
+                .map(([name, result]) => {
+                    const item = document.createElement("div");
+                    item.className = "progress-item";
+                    const percentage = Math.round(
+                        (result.correct / result.attempts) * 100,
+                    );
+                    const label = document.createElement("strong");
+                    label.textContent = name;
+                    const score = document.createElement("span");
+                    score.textContent = `${result.correct}/${result.attempts} (${percentage}%)`;
+                    item.append(label, score);
+                    return item;
+                }),
+        );
+    };
+
+    const topics = new Map<string, { attempts: number; correct: number }>();
+    const concepts = new Map<string, { attempts: number; correct: number }>();
+
+    attempts.forEach((attempt) => {
+        if (attempt.topic) {
+            const result = topics.get(attempt.topic) ?? { attempts: 0, correct: 0 };
+            result.attempts += 1;
+            if (attempt.correct) result.correct += 1;
+            topics.set(attempt.topic, result);
+        }
+
+        attempt.concepts?.forEach((concept) => {
+            const result = concepts.get(concept) ?? { attempts: 0, correct: 0 };
+            result.attempts += 1;
+            if (attempt.correct) result.correct += 1;
+            concepts.set(concept, result);
+        });
+    });
+
+    renderBreakdown("topic-progress", topics, "No topic data yet.");
+    renderBreakdown("concept-progress", concepts, "No concept data yet.");
+</script>
