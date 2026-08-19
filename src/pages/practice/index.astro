@@ -33,6 +33,16 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
                 type="button"
                 data-topic-filter="api">API</button
             >
+
+        <div class="practice-session-length">
+            <label for="session-length-select">Session length</label>
+            <select id="session-length-select">
+                <option value="5" selected>5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="all">All</option>
+            </select>
+        </div>
         </nav>
 
         <p>
@@ -84,7 +94,7 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
                 <strong id="final-answered">0</strong>
             </p>
             <p>Accuracy: <strong id="final-accuracy">0%</strong></p>
-            <a class="new-session-button" href="/practice">New session</a>
+            <a id="new-session" class="new-session-button" href="/practice">New session</a>
         </section>
     </main>
 </Layout>
@@ -121,11 +131,44 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
     const filterButtons = document.querySelectorAll<HTMLButtonElement>(
         "[data-topic-filter]",
     );
+    const sessionLengthSelect =
+        document.querySelector<HTMLSelectElement>("#session-length-select");
+    const newSession = document.querySelector<HTMLAnchorElement>("#new-session");
     const sessionCandidates = Array.from(
         document.querySelectorAll<HTMLElement>("[data-session-question]"),
     );
 
-    const topic = new URLSearchParams(window.location.search).get("topic");
+    const searchParams = new URLSearchParams(window.location.search);
+    const topic = searchParams.get("topic");
+    const requestedLength = searchParams.get("length");
+    const validLengths = ["5", "10", "20", "all"];
+    const selectedLength = validLengths.includes(requestedLength ?? "")
+        ? requestedLength!
+        : "5";
+
+    if (sessionLengthSelect) {
+        sessionLengthSelect.value = selectedLength;
+    }
+
+    const buildPracticeUrl = (nextTopic: string | null, nextLength: string) => {
+        const params = new URLSearchParams();
+
+        if (nextTopic && nextTopic !== "all") {
+            params.set("topic", nextTopic);
+        }
+
+        if (nextLength !== "5") {
+            params.set("length", nextLength);
+        }
+
+        const query = params.toString();
+        return query ? `/practice?${query}` : "/practice";
+    };
+
+    if (newSession) {
+        newSession.href = buildPracticeUrl(topic, selectedLength);
+    }
+
     filterButtons.forEach((button) => {
         button.classList.toggle(
             "active",
@@ -142,7 +185,7 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             );
         })
         .sort(() => Math.random() - 0.5)
-        .slice(0, 5);
+        .slice(0, selectedLength === "all" ? undefined : Number(selectedLength));
 
     sessionCandidates.forEach((question) => {
         const sessionIndex = sessionQuestions.indexOf(question);
@@ -228,11 +271,18 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
         button.addEventListener("click", () => {
             const selectedTopic = button.dataset.topicFilter;
 
-            window.location.href =
-                selectedTopic === "all"
-                    ? "/practice"
-                    : `/practice?topic=${encodeURIComponent(selectedTopic ?? "")}`;
+            window.location.href = buildPracticeUrl(
+                selectedTopic ?? "all",
+                sessionLengthSelect?.value ?? selectedLength,
+            );
         });
+    });
+
+    sessionLengthSelect?.addEventListener("change", () => {
+        window.location.href = buildPracticeUrl(
+            topic,
+            sessionLengthSelect.value,
+        );
     });
 
     nextQuestion?.addEventListener("click", () => {

@@ -14,6 +14,7 @@ export interface Question {
     topic?: string;
     concepts?: string[];
     difficulty?: "beginner" | "intermediate" | "advanced";
+    learningStage?: "foundational" | "applied" | "reasoning";
     explanation?: string;
     sourceId?: string;
     sourceReference?: string;
@@ -26,7 +27,7 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Which example is automation?",
         topic: "automation",
-        concepts: ["automation-definition"],
+        concepts: ["automation-fundamentals"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -51,7 +52,7 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is the main benefit of automation?",
         topic: "automation",
-        concepts: ["automation-benefits"],
+        concepts: ["automation-fundamentals"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -194,6 +195,7 @@ export const automationBasicsQuestions: Question[] = [
         topic: "automation",
         concepts: ["polling-webhooks"],
         difficulty: "intermediate",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -224,7 +226,7 @@ export const apiBasicsQuestions: Question[] = [
 		type: "single-select",
 		prompt: "What is an API endpoint?",
 		topic: "api",
-		concepts: ["endpoint"],
+        concepts: ["endpoints"],
 		difficulty: "beginner",
 		shuffleAnswers: true,
 		answers: [
@@ -256,8 +258,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What does an API request usually contain?",
         topic: "api",
-        concepts: ["apis", "request-response"],
+        concepts: ["api-fundamentals", "request-response"],
         difficulty: "beginner",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -314,7 +317,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Which HTTP method commonly retrieves a resource?",
         topic: "api",
-        concepts: ["http-get"],
+        concepts: ["http-methods"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -343,7 +346,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Which HTTP method commonly creates a resource?",
         topic: "api",
-        concepts: ["http-post"],
+        concepts: ["http-methods"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -372,7 +375,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What are PUT and PATCH commonly used for?",
         topic: "api",
-        concepts: ["http-put-patch"],
+        concepts: ["http-methods"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -401,7 +404,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Which HTTP method commonly removes a resource?",
         topic: "api",
-        concepts: ["http-delete"],
+        concepts: ["http-methods"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -430,7 +433,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is JSON commonly used for in an API?",
         topic: "api",
-        concepts: ["json-basics"],
+        concepts: ["json"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -459,7 +462,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Where is a common JSON object value stored?",
         topic: "api",
-        concepts: ["json-basics"],
+        concepts: ["json"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -490,6 +493,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["webhooks"],
         difficulty: "beginner",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -519,6 +523,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["api-keys", "headers"],
         difficulty: "beginner",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -546,7 +551,7 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What does a bearer token indicate in a request?",
         topic: "api",
-        concepts: ["bearer-tokens", "authentication"],
+        concepts: ["bearer-tokens", "authentication-authorization"],
         difficulty: "beginner",
         shuffleAnswers: true,
         answers: [
@@ -577,6 +582,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["oauth", "authentication-authorization"],
         difficulty: "intermediate",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -606,6 +612,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["access-refresh-tokens", "oauth"],
         difficulty: "intermediate",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -751,6 +758,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["status-codes", "rate-limits"],
         difficulty: "beginner",
+        learningStage: "applied",
         shuffleAnswers: true,
         answers: [
             {
@@ -838,6 +846,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["rate-limits"],
         difficulty: "intermediate",
+        learningStage: "reasoning",
         shuffleAnswers: true,
         answers: [
             {
@@ -867,6 +876,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["idempotency"],
         difficulty: "intermediate",
+        learningStage: "reasoning",
         shuffleAnswers: true,
         answers: [
             {
