@@ -14,7 +14,7 @@ export interface Question {
     topic?: string;
     concepts?: string[];
     difficulty?: "beginner" | "intermediate" | "advanced";
-    learningStage?: "foundational" | "applied" | "reasoning";
+    learningStage?: "recognition" | "understanding" | "application";
     explanation?: string;
     sourceId?: string;
     sourceReference?: string;
@@ -29,6 +29,7 @@ export const automationBasicsQuestions: Question[] = [
         topic: "automation",
         concepts: ["automation-fundamentals"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -54,6 +55,7 @@ export const automationBasicsQuestions: Question[] = [
         topic: "automation",
         concepts: ["automation-fundamentals"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -77,8 +79,9 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is a trigger in an automation?",
         topic: "automation",
-        concepts: ["triggers-actions"],
+        concepts: ["triggers"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -106,8 +109,9 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is an action in an automation?",
         topic: "automation",
-        concepts: ["triggers-actions"],
+        concepts: ["actions"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -135,8 +139,9 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "Which trigger usually provides the fastest response?",
         topic: "automation",
-        concepts: ["polling-webhooks"],
+        concepts: ["webhooks"],
         difficulty: "beginner",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -164,8 +169,9 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "How does polling find new events?",
         topic: "automation",
-        concepts: ["polling-webhooks"],
+        concepts: ["polling"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -193,9 +199,9 @@ export const automationBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is a useful reason to choose polling?",
         topic: "automation",
-        concepts: ["polling-webhooks"],
+        concepts: ["polling"],
         difficulty: "intermediate",
-        learningStage: "applied",
+        learningStage: "application",
         shuffleAnswers: true,
         answers: [
             {
@@ -228,6 +234,7 @@ export const apiBasicsQuestions: Question[] = [
 		topic: "api",
         concepts: ["endpoints"],
 		difficulty: "beginner",
+        learningStage: "recognition",
 		shuffleAnswers: true,
 		answers: [
 			{
@@ -258,9 +265,14 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What does an API request usually contain?",
         topic: "api",
-        concepts: ["api-fundamentals", "request-response"],
+        concepts: [
+            "api-fundamentals",
+            "request-response",
+            "headers",
+            "request-bodies",
+        ],
         difficulty: "beginner",
-        learningStage: "applied",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -290,6 +302,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["request-response"],
         difficulty: "beginner",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -319,6 +332,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["http-methods"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -348,6 +362,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["http-methods"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -377,6 +392,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["http-methods"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -406,6 +422,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["http-methods"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -435,6 +452,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["json"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -464,6 +482,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["json"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -493,7 +512,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["webhooks"],
         difficulty: "beginner",
-        learningStage: "applied",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -523,7 +542,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["api-keys", "headers"],
         difficulty: "beginner",
-        learningStage: "applied",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -551,8 +570,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What does a bearer token indicate in a request?",
         topic: "api",
-        concepts: ["bearer-tokens", "authentication-authorization"],
+        concepts: ["bearer-tokens", "authorization"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -580,9 +600,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is the basic purpose of OAuth?",
         topic: "api",
-        concepts: ["oauth", "authentication-authorization"],
+        concepts: ["oauth-2", "authorization"],
         difficulty: "intermediate",
-        learningStage: "applied",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -610,9 +630,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is the usual role of a refresh token?",
         topic: "api",
-        concepts: ["access-refresh-tokens", "oauth"],
+        concepts: ["access-tokens", "refresh-tokens", "oauth-2"],
         difficulty: "intermediate",
-        learningStage: "applied",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -642,6 +662,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["jwt"],
         difficulty: "intermediate",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -669,8 +690,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What is the difference between authentication and authorization?",
         topic: "api",
-        concepts: ["authentication-authorization"],
+        concepts: ["authentication", "authorization"],
         difficulty: "beginner",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -700,6 +722,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["status-codes"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -727,8 +750,9 @@ export const apiBasicsQuestions: Question[] = [
         type: "single-select",
         prompt: "What does a 401 response usually indicate?",
         topic: "api",
-        concepts: ["status-codes", "authentication-authorization"],
+        concepts: ["status-codes", "authentication"],
         difficulty: "beginner",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -758,7 +782,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["status-codes", "rate-limits"],
         difficulty: "beginner",
-        learningStage: "applied",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -788,6 +812,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["headers"],
         difficulty: "beginner",
+        learningStage: "recognition",
         shuffleAnswers: true,
         answers: [
             {
@@ -817,6 +842,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["query-parameters"],
         difficulty: "beginner",
+        learningStage: "understanding",
         shuffleAnswers: true,
         answers: [
             {
@@ -846,7 +872,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["rate-limits"],
         difficulty: "intermediate",
-        learningStage: "reasoning",
+        learningStage: "application",
         shuffleAnswers: true,
         answers: [
             {
@@ -876,7 +902,7 @@ export const apiBasicsQuestions: Question[] = [
         topic: "api",
         concepts: ["idempotency"],
         difficulty: "intermediate",
-        learningStage: "reasoning",
+        learningStage: "application",
         shuffleAnswers: true,
         answers: [
             {

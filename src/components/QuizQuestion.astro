@@ -13,6 +13,8 @@ const { question, mode = "lesson" } = Astro.props;
     data-question-id={question.id}
     data-topic={question.topic}
     data-concepts={question.concepts?.join(",")}
+    data-difficulty={question.difficulty}
+    data-learning-stage={question.learningStage}
     data-mode={mode}
     data-shuffle-answers={question.shuffleAnswers ?? true}
 >

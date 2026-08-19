@@ -1,3 +1,5 @@
+import type { Question } from "./questions";
+
 export interface PracticeAttempt {
     questionId: string;
     answerId: string;
@@ -5,6 +7,8 @@ export interface PracticeAttempt {
     answeredAt: string;
     topic?: string;
     concepts?: string[];
+    difficulty?: Question["difficulty"];
+    learningStage?: Question["learningStage"];
 }
 
 export const ATTEMPTS_STORAGE_KEY = "aaronholmes.practice.attempts";

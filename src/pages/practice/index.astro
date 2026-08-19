@@ -226,6 +226,8 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
         const concepts = quiz?.dataset.concepts
             ?.split(",")
             .filter(Boolean);
+        const difficulty = quiz?.dataset.difficulty;
+        const learningStage = quiz?.dataset.learningStage;
 
         savePracticeAttempt({
             questionId,
@@ -234,6 +236,13 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             answeredAt: new Date().toISOString(),
             ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
             ...(concepts?.length && { concepts }),
+            ...(difficulty && { difficulty: difficulty as "beginner" | "intermediate" | "advanced" }),
+            ...(learningStage && {
+                learningStage: learningStage as
+                    | "recognition"
+                    | "understanding"
+                    | "application",
+            }),
         });
 
         totalAnswered += 1;
