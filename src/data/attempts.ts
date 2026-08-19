@@ -32,3 +32,11 @@ export function savePracticeAttempt(attempt: PracticeAttempt): void {
         // Local storage can be unavailable or full; scoring should still work.
     }
 }
+
+export function clearPracticeAttempts(): void {
+    try {
+        localStorage.removeItem(ATTEMPTS_STORAGE_KEY);
+    } catch {
+        // Local storage can be unavailable; the existing history remains untouched.
+    }
+}

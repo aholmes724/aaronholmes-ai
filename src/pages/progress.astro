@@ -40,27 +40,46 @@ import Layout from "../layouts/Layout.astro";
             </div>
         </section>
 
-        <p><a class="new-session-button" href="/practice">Practice again</a></p>
+        <div class="progress-actions">
+            <a class="new-session-button" href="/practice">Practice again</a>
+            <button id="reset-progress" class="reset-progress-button" type="button">
+                Reset all progress
+            </button>
+        </div>
+
+        <section
+            id="reset-confirmation"
+            class="reset-confirmation"
+            hidden
+            aria-labelledby="reset-heading"
+        >
+            <h2 id="reset-heading">Reset all progress?</h2>
+            <p>
+                This will delete all saved Practice attempt history on this
+                device. This cannot be undone.
+            </p>
+            <div class="progress-actions">
+                <button id="confirm-reset" class="reset-progress-button" type="button">
+                    Confirm reset
+                </button>
+                <button id="cancel-reset" class="secondary-button" type="button">
+                    Cancel
+                </button>
+            </div>
+        </section>
     </main>
 </Layout>
 
 <script>
-    import { readPracticeAttempts } from "../data/attempts";
-
-    const attempts = readPracticeAttempts();
-    const correctAttempts = attempts.filter((attempt) => attempt.correct).length;
-    const accuracy = attempts.length
-        ? Math.round((correctAttempts / attempts.length) * 100)
-        : 0;
+    import {
+        clearPracticeAttempts,
+        readPracticeAttempts,
+    } from "../data/attempts";
 
     const setText = (id: string, value: string) => {
         const element = document.querySelector<HTMLElement>(`#${id}`);
         if (element) element.textContent = value;
     };
-
-    setText("total-attempts", attempts.length.toString());
-    setText("total-correct", correctAttempts.toString());
-    setText("overall-accuracy", `${accuracy}%`);
 
     const renderBreakdown = (
         containerId: string,
@@ -94,25 +113,61 @@ import Layout from "../layouts/Layout.astro";
         );
     };
 
-    const topics = new Map<string, { attempts: number; correct: number }>();
-    const concepts = new Map<string, { attempts: number; correct: number }>();
+    const renderProgress = () => {
+        const attempts = readPracticeAttempts();
+        const correctAttempts = attempts.filter((attempt) => attempt.correct).length;
+        const accuracy = attempts.length
+            ? Math.round((correctAttempts / attempts.length) * 100)
+            : 0;
 
-    attempts.forEach((attempt) => {
-        if (attempt.topic) {
-            const result = topics.get(attempt.topic) ?? { attempts: 0, correct: 0 };
-            result.attempts += 1;
-            if (attempt.correct) result.correct += 1;
-            topics.set(attempt.topic, result);
-        }
+        setText("total-attempts", attempts.length.toString());
+        setText("total-correct", correctAttempts.toString());
+        setText("overall-accuracy", `${accuracy}%`);
 
-        attempt.concepts?.forEach((concept) => {
-            const result = concepts.get(concept) ?? { attempts: 0, correct: 0 };
-            result.attempts += 1;
-            if (attempt.correct) result.correct += 1;
-            concepts.set(concept, result);
+        const topics = new Map<string, { attempts: number; correct: number }>();
+        const concepts = new Map<string, { attempts: number; correct: number }>();
+
+        attempts.forEach((attempt) => {
+            if (attempt.topic) {
+                const result = topics.get(attempt.topic) ?? { attempts: 0, correct: 0 };
+                result.attempts += 1;
+                if (attempt.correct) result.correct += 1;
+                topics.set(attempt.topic, result);
+            }
+
+            attempt.concepts?.forEach((concept) => {
+                const result = concepts.get(concept) ?? { attempts: 0, correct: 0 };
+                result.attempts += 1;
+                if (attempt.correct) result.correct += 1;
+                concepts.set(concept, result);
+            });
         });
+
+        renderBreakdown("topic-progress", topics, "No topic data yet.");
+        renderBreakdown("concept-progress", concepts, "No concept data yet.");
+    };
+
+    const resetProgress = document.querySelector<HTMLButtonElement>("#reset-progress");
+    const resetConfirmation = document.querySelector<HTMLElement>("#reset-confirmation");
+    const confirmReset = document.querySelector<HTMLButtonElement>("#confirm-reset");
+    const cancelReset = document.querySelector<HTMLButtonElement>("#cancel-reset");
+
+    resetProgress?.addEventListener("click", () => {
+        if (resetConfirmation) resetConfirmation.hidden = false;
+        confirmReset?.focus();
     });
 
-    renderBreakdown("topic-progress", topics, "No topic data yet.");
-    renderBreakdown("concept-progress", concepts, "No concept data yet.");
+    cancelReset?.addEventListener("click", () => {
+        if (resetConfirmation) resetConfirmation.hidden = true;
+        resetProgress?.focus();
+    });
+
+    confirmReset?.addEventListener("click", () => {
+        clearPracticeAttempts();
+        renderProgress();
+        if (resetConfirmation) resetConfirmation.hidden = true;
+        resetProgress?.focus();
+    });
+
+    renderProgress();
 </script>

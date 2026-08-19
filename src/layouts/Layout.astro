@@ -22,10 +22,57 @@ const {
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+    <script is:inline>
+      const savedTheme = localStorage.getItem("aaronholmes.theme");
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      document.documentElement.dataset.theme = savedTheme || systemTheme;
+    </script>
+
     <title>{title}</title>
   </head>
 
   <body>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="site-brand" href="/">Aaron Holmes</a>
+        <button
+          class="theme-toggle"
+          id="theme-toggle"
+          type="button"
+          aria-pressed="false"
+          title="Toggle color theme"
+        >
+          <span class="theme-toggle-label">Dark mode</span>
+        </button>
+      </div>
+    </header>
     <slot />
   </body>
 </html>
+
+<script>
+  const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle");
+  const themeToggleLabel = themeToggle?.querySelector<HTMLElement>(
+    ".theme-toggle-label",
+  );
+
+  const updateThemeToggle = (theme: string) => {
+    const isDark = theme === "dark";
+    if (themeToggle) themeToggle.setAttribute("aria-pressed", String(isDark));
+    if (themeToggleLabel) {
+      themeToggleLabel.textContent = isDark ? "Light mode" : "Dark mode";
+    }
+  };
+
+  updateThemeToggle(document.documentElement.dataset.theme ?? "light");
+
+  themeToggle?.addEventListener("click", () => {
+    const nextTheme =
+      document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem("aaronholmes.theme", nextTheme);
+    updateThemeToggle(nextTheme);
+  });
+</script>

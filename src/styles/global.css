@@ -5,6 +5,12 @@
   --text-muted: #666666;
   --border: #deded8;
   --accent: #244f73;
+	--surface-alt: #f0f2f2;
+	--success-border: #2f7d4a;
+	--success-surface: #edf7f0;
+	--danger-border: #b84a4a;
+	--danger-surface: #fbefef;
+	--danger-text: #8f3030;
 
   --content-width: 1120px;
   --reading-width: 720px;
@@ -14,6 +20,21 @@
     "Segoe UI", sans-serif;
   color: var(--text);
   background: var(--background);
+}
+
+:root[data-theme="dark"] {
+	--background: #171a1c;
+	--surface: #22272a;
+	--text: #f1f3f2;
+	--text-muted: #b5bcbd;
+	--border: #3c4548;
+	--accent: #83b6d8;
+	--surface-alt: #2b3336;
+	--success-border: #65b783;
+	--success-surface: #1f3929;
+	--danger-border: #e28383;
+	--danger-surface: #452629;
+	--danger-text: #f3aaaa;
 }
 
 * {
@@ -30,6 +51,50 @@ body {
   background: var(--background);
   color: var(--text);
   line-height: 1.6;
+}
+
+button,
+select {
+	font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 3px;
+}
+
+.site-header {
+	border-bottom: 1px solid var(--border);
+}
+
+.site-header-inner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	width: min(calc(100% - 2rem), var(--content-width));
+	min-height: 3.5rem;
+	margin-inline: auto;
+}
+
+.site-brand {
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.theme-toggle {
+	padding: 0.4rem 0.65rem;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+}
+
+.theme-toggle:hover {
+	border-color: var(--accent);
 }
 
 a {
@@ -90,13 +155,13 @@ img {
 }
 
 .answer-option[data-result="correct"] {
-	border-color: #2f7d4a;
-	background: #edf7f0;
+	border-color: var(--success-border);
+	background: var(--success-surface);
 }
 
 .answer-option[data-result="incorrect"] {
-	border-color: #b84a4a;
-	background: #fbefef;
+	border-color: var(--danger-border);
+	background: var(--danger-surface);
 }
 
 .lesson-card {
@@ -296,6 +361,56 @@ img {
 
 .progress-item span {
 	color: var(--text-muted);
+}
+
+.progress-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 1.5rem;
+}
+
+.reset-progress-button,
+.secondary-button {
+	padding: 0.65rem 1rem;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.reset-progress-button {
+	border-color: var(--danger-border);
+	color: var(--danger-text);
+}
+
+.reset-progress-button:hover {
+	background: var(--danger-surface);
+}
+
+.secondary-button:hover {
+	border-color: var(--accent);
+}
+
+.reset-confirmation {
+	margin-top: 1.5rem;
+	padding: 1rem;
+	border: 1px solid var(--danger-border);
+	border-radius: 0.75rem;
+	background: var(--danger-surface);
+}
+
+.reset-confirmation[hidden] {
+	display: none;
+}
+
+.reset-confirmation h2,
+.reset-confirmation p {
+	margin-top: 0;
 }
 
 @media (min-width: 700px) {
