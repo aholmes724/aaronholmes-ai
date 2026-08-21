@@ -203,27 +203,6 @@ img {
 	}
 }
 
-.practice-filters {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
-	margin: 1rem 0 1.5rem;
-}
-
-.practice-filters a {
-	display: inline-block;
-	padding: 0.5rem 0.8rem;
-	border: 1px solid var(--border);
-	border-radius: 999px;
-	background: var(--surface);
-	text-decoration: none;
-	font-size: 0.95rem;
-}
-
-.practice-filters a:hover {
-	border-color: var(--accent);
-}
-
 .new-session-button {
 	display: inline-block;
 	padding: 0.65rem 1rem;
@@ -238,12 +217,6 @@ img {
 
 .new-session-button:hover {
 	opacity: 0.9;
-}
-
-.practice-filters button.active {
-	border-color: var(--accent);
-	background: var(--accent);
-	color: white;
 }
 
 .practice-session-length {
@@ -421,4 +394,92 @@ img {
 	.progress-stats div {
 		display: block;
 	}
+}
+
+/* Practice mode selector */
+.practice-mode-selector {
+	display: grid;
+	gap: 0.5rem;
+	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+	margin: 1.5rem 0;
+	padding: 0;
+}
+
+.practice-mode-button {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	padding: 0.75rem 0.5rem;
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	font-size: 0.9rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.15s ease-in-out;
+}
+
+.practice-mode-button:hover {
+	border-color: var(--accent);
+	background: var(--surface-alt);
+}
+
+.practice-mode-button.active {
+	border-color: var(--accent);
+	background: var(--accent);
+	color: white;
+}
+
+.mode-icon {
+	display: block;
+	font-size: 1.5rem;
+}
+
+.mode-label {
+	display: block;
+	text-align: center;
+	font-size: 0.85rem;
+	line-height: 1.2;
+}
+
+#practice-mode-info {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border-left: 3px solid var(--accent);
+	background: var(--surface-alt);
+	border-radius: 0.25rem;
+}
+
+#practice-mode-info p {
+	margin: 0;
+	font-size: 0.95rem;
+	color: var(--text-muted);
+}
+
+.practice-empty-state {
+	display: grid;
+	gap: 1rem;
+	margin: 2rem 0;
+	padding: 1.5rem;
+	border: 2px dashed var(--border);
+	border-radius: 0.75rem;
+	background: var(--surface);
+	text-align: center;
+}
+
+.practice-empty-state[hidden] {
+	display: none;
+}
+
+.practice-empty-state p {
+	margin: 0;
+	color: var(--text-muted);
+}
+
+.practice-empty-state .new-session-button {
+	justify-self: center;
 }
