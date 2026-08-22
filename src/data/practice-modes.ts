@@ -12,7 +12,7 @@ export interface ModeFilter {
     topic?: string | string[];
     concepts?: string[];
     learningStages?: string[];
-    weightLearningStage?: boolean;
+    
 }
 
 export const PRACTICE_MODES: Record<string, PracticeMode> = {
@@ -53,7 +53,6 @@ function getModeFilter(mode: string): ModeFilter {
         case "interview":
             return {
                 learningStages: ["application", "understanding"],
-                weightLearningStage: true,
             };
 
         case "api-auth":
@@ -146,7 +145,7 @@ export function filterQuestionsByMode(
 
     const filter = getModeFilter(mode);
 
-    let filtered = questions.filter((q) => {
+    const filtered = questions.filter((q) => {
         // Topic filter
         if (filter.topic) {
             if (Array.isArray(filter.topic)) {
@@ -173,20 +172,7 @@ export function filterQuestionsByMode(
         return true;
     });
 
-    // If weightLearningStage is true, sort so application > understanding > recognition
-    // This prioritizes but doesn't exclude lower stages
-    if (filter.weightLearningStage) {
-        const stageOrder: Record<string, number> = {
-            application: 0,
-            understanding: 1,
-            recognition: 2,
-        };
-        filtered.sort(
-            (a, b) =>
-                (stageOrder[a.learningStage ?? ""] ?? 999) -
-                (stageOrder[b.learningStage ?? ""] ?? 999),
-        );
-    }
+    
 
     return filtered;
 }

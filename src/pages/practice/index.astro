@@ -265,17 +265,14 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
                 const learningStage = quiz.dataset.learningStage ?? "";
 
                 // Check if this question matches the mode filters
-                if (mode === "interview") {
-                    // Favor application/understanding
-                    if (
-                        learningStage !== "application" &&
-                        learningStage !== "understanding"
-                    ) {
-                        // Still include recognition, but less frequently
-                        return true;
-                    }
+                if (
+                    mode === "interview" &&
+                    learningStage !== "application" &&
+                    learningStage !== "understanding"
+                ) {
+                    return false;
                 }
-
+                
                 if (mode === "api-auth") {
                     // Filter to auth-related concepts
                     const authConcepts = [
@@ -313,7 +310,6 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
                     }
                 }
             }
-
             return true;
         });
     }
