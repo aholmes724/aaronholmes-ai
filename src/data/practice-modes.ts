@@ -1,4 +1,3 @@
-import type { Question } from "./questions";
 import type { PracticeAttempt } from "./attempts";
 
 export interface PracticeMode {
@@ -8,11 +7,18 @@ export interface PracticeMode {
     icon?: string;
 }
 
+// Minimal shape needed for mode matching; satisfied by both Question objects
+// and dataset-derived metadata read from rendered quiz elements in the browser.
+export interface QuestionMeta {
+    topic?: string;
+    concepts?: string[];
+    learningStage?: string;
+}
+
 export interface ModeFilter {
     topic?: string | string[];
     concepts?: string[];
     learningStages?: string[];
-    
 }
 
 export const PRACTICE_MODES: Record<string, PracticeMode> = {
@@ -46,51 +52,90 @@ export const PRACTICE_MODES: Record<string, PracticeMode> = {
         description: "Review automation workflows and triggers",
         icon: "⚙️",
     },
+    "code-data": {
+        id: "code-data",
+        label: "Code & Data",
+        description: "Practice coding and data-handling concepts",
+        icon: "🧮",
+    },
+    "ai-industry": {
+        id: "ai-industry",
+        label: "AI & Industry",
+        description: "Practice AI concepts and industry context",
+        icon: "🤖",
+    },
 };
 
-function getModeFilter(mode: string): ModeFilter {
-    switch (mode) {
-        case "interview":
-            return {
-                learningStages: ["application", "understanding"],
-            };
+// Single source of truth for mode selection rules. Both server-side filtering
+// (filterQuestionsByMode) and client-side filtering (matchesMode) read from
+// this same config so mode logic never has to be duplicated or drift apart.
+const MODE_FILTERS: Record<string, ModeFilter> = {
+    all: {},
+    interview: {
+        learningStages: ["understanding", "application"],
+    },
+    "api-auth": {
+        topic: "api",
+        concepts: [
+            "api-keys",
+            "headers",
+            "bearer-tokens",
+            "oauth-2",
+            "access-tokens",
+            "refresh-tokens",
+            "jwt",
+            "authentication",
+            "authorization",
+            "status-codes",
+            "rate-limits",
+            "pagination",
+            "idempotency",
+            "request-response",
+            "http-methods",
+        ],
+    },
+    automation: {
+        topic: "automation",
+    },
+    "code-data": {
+        topic: "code-data",
+    },
+    "ai-industry": {
+        topic: "ai-industry",
+    },
+};
 
-        case "api-auth":
-            return {
-                topic: "api",
-                concepts: [
-                    "api-keys",
-                    "headers",
-                    "bearer-tokens",
-                    "oauth-2",
-                    "access-tokens",
-                    "refresh-tokens",
-                    "jwt",
-                    "authentication",
-                    "authorization",
-                    "status-codes",
-                    "rate-limits",
-                    "pagination",
-                    "idempotency",
-                    "request-response",
-                    "http-methods",
-                ],
-            };
+/** Weak mode is handled separately via matchesWeakConcepts; every other mode is matched here. */
+export function matchesMode(question: QuestionMeta, mode: string): boolean {
+    const filter = MODE_FILTERS[mode];
+    if (!filter) return true;
 
-        case "automation":
-            return {
-                topic: "automation",
-            };
-
-        case "weak":
-            // Weak concepts mode is handled specially by client-side logic
-            // This returns an empty filter to indicate "calculate from attempts"
-            return {};
-
-        case "all":
-        default:
-            return {};
+    if (filter.topic) {
+        const topics = Array.isArray(filter.topic) ? filter.topic : [filter.topic];
+        if (!topics.includes(question.topic ?? "")) return false;
     }
+
+    if (filter.concepts && filter.concepts.length > 0) {
+        if (!question.concepts?.some((c) => filter.concepts!.includes(c))) {
+            return false;
+        }
+    }
+
+    if (filter.learningStages && filter.learningStages.length > 0) {
+        if (!filter.learningStages.includes(question.learningStage ?? "")) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+export function matchesWeakConcepts(
+    question: QuestionMeta,
+    weakConcepts: string[],
+): boolean {
+    if (!weakConcepts.length) return false;
+    return question.concepts?.some((c) => weakConcepts.includes(c)) ?? false;
 }
 
 export function getWeakConceptsFromAttempts(
@@ -128,63 +173,19 @@ export function getWeakConceptsFromAttempts(
     return weakConcepts;
 }
 
-export function filterQuestionsByMode(
-    questions: Question[],
+/** Server-side/testing convenience wrapper around matchesMode / matchesWeakConcepts. */
+export function filterQuestionsByMode<T extends QuestionMeta>(
+    questions: T[],
     mode: string,
     weakConcepts?: string[],
-): Question[] {
+): T[] {
     if (mode === "weak") {
-        if (!weakConcepts || !weakConcepts.length) {
-            return [];
-        }
-        // Return questions that contain at least one weak concept
-        return questions.filter((q) =>
-            q.concepts?.some((c) => weakConcepts.includes(c)),
-        );
+        return questions.filter((q) => matchesWeakConcepts(q, weakConcepts ?? []));
     }
 
-    const filter = getModeFilter(mode);
-
-    const filtered = questions.filter((q) => {
-        // Topic filter
-        if (filter.topic) {
-            if (Array.isArray(filter.topic)) {
-                if (!filter.topic.includes(q.topic ?? "")) return false;
-            } else {
-                if (q.topic !== filter.topic) return false;
-            }
-        }
-
-        // Concept filter: question must have at least one of the specified concepts
-        if (filter.concepts && filter.concepts.length > 0) {
-            if (!q.concepts?.some((c) => filter.concepts!.includes(c))) {
-                return false;
-            }
-        }
-
-        // Learning stage filter
-        if (filter.learningStages && filter.learningStages.length > 0) {
-            if (!filter.learningStages.includes(q.learningStage ?? "")) {
-                return false;
-            }
-        }
-
-        return true;
-    });
-
-    
-
-    return filtered;
-}
-
-export function getModeLabel(mode: string): string {
-    return PRACTICE_MODES[mode]?.label || "Practice";
+    return questions.filter((q) => matchesMode(q, mode));
 }
 
 export function getModeDescription(mode: string): string {
     return PRACTICE_MODES[mode]?.description || "";
-}
-
-export function getModeIcon(mode: string): string {
-    return PRACTICE_MODES[mode]?.icon || "📝";
 }

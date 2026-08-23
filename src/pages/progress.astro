@@ -26,6 +26,13 @@ import Layout from "../layouts/Layout.astro";
             </dl>
         </section>
 
+        <section aria-labelledby="sessions-heading">
+            <h2 id="sessions-heading">Recent sessions</h2>
+            <div id="session-history" class="progress-list">
+                <p>No completed sessions yet.</p>
+            </div>
+        </section>
+
         <section aria-labelledby="topic-heading">
             <h2 id="topic-heading">Accuracy by topic</h2>
             <div id="topic-progress" class="progress-list">
@@ -74,7 +81,9 @@ import Layout from "../layouts/Layout.astro";
     import {
         clearPracticeAttempts,
         readPracticeAttempts,
+        readSessionSummaries,
     } from "../data/attempts";
+    import { PRACTICE_MODES } from "../data/practice-modes";
 
     const setText = (id: string, value: string) => {
         const element = document.querySelector<HTMLElement>(`#${id}`);
@@ -113,6 +122,42 @@ import Layout from "../layouts/Layout.astro";
         );
     };
 
+    const renderSessionHistory = () => {
+        const container = document.querySelector<HTMLElement>("#session-history");
+        if (!container) return;
+
+        const sessions = [...readSessionSummaries()].sort(
+            (first, second) =>
+                new Date(second.completedAt).getTime() -
+                new Date(first.completedAt).getTime(),
+        );
+
+        if (!sessions.length) {
+            container.innerHTML = "<p>No completed sessions yet.</p>";
+            return;
+        }
+
+        container.replaceChildren(
+            ...sessions.map((session) => {
+                const item = document.createElement("div");
+                item.className = "progress-item";
+
+                const label = document.createElement("strong");
+                label.textContent = PRACTICE_MODES[session.mode]?.label ?? session.mode;
+
+                const score = document.createElement("span");
+                const percentage = session.answeredCount
+                    ? Math.round((session.correctCount / session.answeredCount) * 100)
+                    : 0;
+                const completedAt = new Date(session.completedAt).toLocaleString();
+                score.textContent = `${session.correctCount}/${session.answeredCount} (${percentage}%) · ${completedAt}`;
+
+                item.append(label, score);
+                return item;
+            }),
+        );
+    };
+
     const renderProgress = () => {
         const attempts = readPracticeAttempts();
         const correctAttempts = attempts.filter((attempt) => attempt.correct).length;
@@ -145,6 +190,7 @@ import Layout from "../layouts/Layout.astro";
 
         renderBreakdown("topic-progress", topics, "No topic data yet.");
         renderBreakdown("concept-progress", concepts, "No concept data yet.");
+        renderSessionHistory();
     };
 
     const resetProgress = document.querySelector<HTMLButtonElement>("#reset-progress");

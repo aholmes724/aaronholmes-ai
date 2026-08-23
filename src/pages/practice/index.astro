@@ -1,18 +1,10 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import QuizQuestion from "../../components/QuizQuestion.astro";
-import {
-    automationBasicsQuestions,
-    apiBasicsQuestions,
-} from "../../data/questions";
-import {
-    PRACTICE_MODES,
-    getModeLabel,
-    getModeDescription,
-    getModeIcon,
-} from "../../data/practice-modes";
+import { allQuestions } from "../../data/questions";
+import { PRACTICE_MODES } from "../../data/practice-modes";
 
-const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
+const practiceQuestions = allQuestions;
 
 ---
 
@@ -114,14 +106,22 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
 </Layout>
 
 <script>
-    import { savePracticeAttempt, readPracticeAttempts } from "../../data/attempts";
     import {
-        filterQuestionsByMode,
+        savePracticeAttempt,
+        readPracticeAttempts,
+        saveSessionSummary,
+    } from "../../data/attempts";
+    import {
+        matchesMode,
+        matchesWeakConcepts,
         getWeakConceptsFromAttempts,
-        getModeLabel,
         getModeDescription,
-        PRACTICE_MODES,
+        type QuestionMeta,
     } from "../../data/practice-modes";
+
+    const sessionId = crypto.randomUUID();
+    const sessionStartedAt = new Date().toISOString();
+    let sessionSummarySaved = false;
 
     const practiceScore =
         document.querySelector<HTMLElement>("#practice-score");
@@ -220,97 +220,33 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
         newSession.href = buildPracticeUrl(mode, topic, selectedLength);
     }
 
-    // Get all questions rendered in the page
-    const allQuizQuestions = Array.from(
-        document.querySelectorAll<HTMLElement>(".quiz-question"),
-    );
+    const toQuestionMeta = (quiz: HTMLElement | null): QuestionMeta => ({
+        topic: quiz?.dataset.topic,
+        concepts: quiz?.dataset.concepts?.split(",").filter(Boolean) ?? [],
+        learningStage: quiz?.dataset.learningStage,
+    });
 
-    // Filter questions by mode (client-side weak concepts calculation)
+    // Filter questions by mode using the single shared mode-matching rules
     let filteredByMode: HTMLElement[] = [];
     if (mode === "weak") {
         const attempts = readPracticeAttempts();
         const weakConcepts = getWeakConceptsFromAttempts(attempts);
 
-        if (weakConcepts.length === 0) {
-            // No weak concepts yet
-            if (practiceEmptyState) {
-                practiceEmptyState.hidden = false;
-            }
-            filteredByMode = [];
-        } else {
-            // Filter sessionCandidates to only those with weak concepts
-            filteredByMode = sessionCandidates.filter((question) => {
-                const quiz = question.querySelector<HTMLElement>(".quiz-question");
-                const concepts = quiz?.dataset.concepts?.split(",") ?? [];
-                return concepts.some((c) => weakConcepts.includes(c));
-            });
-        }
+        filteredByMode = sessionCandidates.filter((question) => {
+            const quiz = question.querySelector<HTMLElement>(".quiz-question");
+            return matchesWeakConcepts(toQuestionMeta(quiz), weakConcepts);
+        });
     } else {
-        // Apply mode-based filtering to candidates
         filteredByMode = sessionCandidates.filter((question) => {
             const quiz = question.querySelector<HTMLElement>(".quiz-question");
             if (!quiz) return false;
 
-            // Apply topic filter for "all" mode
-            if (mode === "all" && topic) {
-                if (quiz.dataset.topic !== topic) {
-                    return false;
-                }
+            // Backward-compatible topic filter, only meaningful for "all" mode
+            if (mode === "all" && topic && quiz.dataset.topic !== topic) {
+                return false;
             }
 
-            // For non-"all" modes, apply the mode-specific filters
-            if (mode !== "all") {
-                // Reconstruct minimal question object for filtering
-                const concepts = quiz.dataset.concepts?.split(",") ?? [];
-                const learningStage = quiz.dataset.learningStage ?? "";
-
-                // Check if this question matches the mode filters
-                if (
-                    mode === "interview" &&
-                    learningStage !== "application" &&
-                    learningStage !== "understanding"
-                ) {
-                    return false;
-                }
-                
-                if (mode === "api-auth") {
-                    // Filter to auth-related concepts
-                    const authConcepts = [
-                        "api-keys",
-                        "headers",
-                        "bearer-tokens",
-                        "oauth-2",
-                        "access-tokens",
-                        "refresh-tokens",
-                        "jwt",
-                        "authentication",
-                        "authorization",
-                        "status-codes",
-                        "rate-limits",
-                        "pagination",
-                        "idempotency",
-                        "request-response",
-                        "http-methods",
-                    ];
-
-                    if (quiz.dataset.topic !== "api") {
-                        return false;
-                    }
-
-                    if (
-                        !concepts.some((c) => authConcepts.includes(c))
-                    ) {
-                        return false;
-                    }
-                }
-
-                if (mode === "automation") {
-                    if (quiz.dataset.topic !== "automation") {
-                        return false;
-                    }
-                }
-            }
-            return true;
+            return matchesMode(toQuestionMeta(quiz), mode);
         });
     }
 
@@ -318,6 +254,11 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
     const sessionQuestions = filteredByMode
         .sort(() => Math.random() - 0.5)
         .slice(0, selectedLength === "all" ? undefined : Number(selectedLength));
+
+    // Generic empty state: applies to weak concepts and to any domain with no questions yet
+    if (practiceEmptyState) {
+        practiceEmptyState.hidden = sessionQuestions.length !== 0;
+    }
 
     // Hide all, then show only the current question
     sessionCandidates.forEach((question) => {
@@ -367,6 +308,7 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             answerId,
             correct: customEvent.detail.correct,
             answeredAt: new Date().toISOString(),
+            sessionId,
             ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
             ...(concepts?.length && { concepts }),
             ...(difficulty && { difficulty: difficulty as "beginner" | "intermediate" | "advanced" }),
@@ -430,6 +372,20 @@ const practiceQuestions = [...automationBasicsQuestions, ...apiBasicsQuestions];
             nextQuestion.hidden = true;
             if (nextQuestionContainer) nextQuestionContainer.hidden = true;
             if (sessionComplete) sessionComplete.hidden = false;
+
+            if (!sessionSummarySaved) {
+                sessionSummarySaved = true;
+                saveSessionSummary({
+                    id: sessionId,
+                    mode,
+                    requestedLength: selectedLength,
+                    startedAt: sessionStartedAt,
+                    completedAt: new Date().toISOString(),
+                    questionCount: sessionLength,
+                    answeredCount: totalAnswered,
+                    correctCount: correctAnswers,
+                });
+            }
             return;
         }
 
