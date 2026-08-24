@@ -24,11 +24,7 @@ const {
 
     <script is:inline>
       const savedTheme = localStorage.getItem("aaronholmes.theme");
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-      document.documentElement.dataset.theme = savedTheme || systemTheme;
+      document.documentElement.dataset.theme = savedTheme || "dark";
     </script>
 
     <title>{title}</title>
