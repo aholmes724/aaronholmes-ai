@@ -5,12 +5,12 @@
   --text-muted: #666666;
   --border: #deded8;
   --accent: #244f73;
-	--surface-alt: #f0f2f2;
-	--success-border: #2f7d4a;
-	--success-surface: #edf7f0;
-	--danger-border: #b84a4a;
-	--danger-surface: #fbefef;
-	--danger-text: #8f3030;
+  --surface-alt: #f0f2f2;
+  --success-border: #2f7d4a;
+  --success-surface: #edf7f0;
+  --danger-border: #b84a4a;
+  --danger-surface: #fbefef;
+  --danger-text: #8f3030;
 
   --content-width: 1120px;
   --reading-width: 720px;
@@ -23,18 +23,18 @@
 }
 
 :root[data-theme="dark"] {
-	--background: #171a1c;
-	--surface: #22272a;
-	--text: #f1f3f2;
-	--text-muted: #b5bcbd;
-	--border: #3c4548;
-	--accent: #83b6d8;
-	--surface-alt: #2b3336;
-	--success-border: #65b783;
-	--success-surface: #1f3929;
-	--danger-border: #e28383;
-	--danger-surface: #452629;
-	--danger-text: #f3aaaa;
+  --background: #171a1c;
+  --surface: #22272a;
+  --text: #f1f3f2;
+  --text-muted: #b5bcbd;
+  --border: #3c4548;
+  --accent: #83b6d8;
+  --surface-alt: #2b3336;
+  --success-border: #65b783;
+  --success-surface: #1f3929;
+  --danger-border: #e28383;
+  --danger-surface: #452629;
+  --danger-text: #f3aaaa;
 }
 
 * {
@@ -55,46 +55,14 @@ body {
 
 button,
 select {
-	font: inherit;
+  font: inherit;
 }
 
 button:focus-visible,
 a:focus-visible,
 select:focus-visible {
-	outline: 3px solid var(--accent);
-	outline-offset: 3px;
-}
-
-.site-header {
-	border-bottom: 1px solid var(--border);
-}
-
-.site-header-inner {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1rem;
-	width: min(calc(100% - 2rem), var(--content-width));
-	min-height: 3.5rem;
-	margin-inline: auto;
-}
-
-.site-brand {
-	font-weight: 700;
-	text-decoration: none;
-}
-
-.theme-toggle {
-	padding: 0.4rem 0.65rem;
-	border: 1px solid var(--border);
-	border-radius: 0.5rem;
-	background: var(--surface);
-	color: var(--text);
-	cursor: pointer;
-}
-
-.theme-toggle:hover {
-	border-color: var(--accent);
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
 a {
@@ -119,369 +87,434 @@ img {
   }
 }
 
+/* Global site header */
+.site-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.site-header-inner {
+  width: min(calc(100% - 2rem), var(--content-width));
+  min-height: 4.5rem;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.site-brand {
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1.25rem;
+}
+
+.site-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--text);
+}
+
+.theme-toggle {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .site-header-inner {
+    grid-template-columns: 1fr auto;
+    row-gap: 0.75rem;
+    padding-block: 0.75rem;
+  }
+
+  .site-nav {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+  }
+}
+
 .answers {
-	display: flex;
-	flex-direction: column;
-	gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .answer-option {
-	display: flex;
-	align-items: flex-start;
-	gap: 0.75rem;
-	width: 100%;
-	padding: 1rem;
-	border: 1px solid var(--border);
-	border-radius: 0.75rem;
-	background: var(--surface);
-	cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  cursor: pointer;
 }
 
 .answer-option:hover {
-	border-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .answer-option input {
-	margin-top: 0.2rem;
+  margin-top: 0.2rem;
 }
 
 .answer-option span {
-	flex: 1;
+  flex: 1;
 }
 
 .answer-option:has(input:checked):not([data-result]) {
-	border-color: var(--accent);
-	background: var(--surface-alt);
+  border-color: var(--accent);
+  background: var(--surface-alt);
 }
 
 .answer-option[data-result="correct"] {
-	border-color: var(--success-border);
-	background: var(--success-surface);
+  border-color: var(--success-border);
+  background: var(--success-surface);
 }
 
 .answer-option[data-result="incorrect"] {
-	border-color: var(--danger-border);
-	background: var(--danger-surface);
+  border-color: var(--danger-border);
+  background: var(--danger-surface);
 }
 
 .lesson-card {
-	display: block;
-	padding: 1.25rem;
-	border: 1px solid var(--border);
-	border-radius: 0.75rem;
-	background: var(--surface);
-	text-decoration: none;
+  display: block;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  text-decoration: none;
 }
 
 .lesson-card:hover {
-	border-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .lesson-card h2 {
-	margin-top: 0;
-	margin-bottom: 0.5rem;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
 }
 
 .lesson-card p {
-	margin: 0 0 1rem;
-	color: var(--text-muted);
+  margin: 0 0 1rem;
+  color: var(--text-muted);
 }
 
 .lesson-card span {
-	font-weight: 600;
+  font-weight: 600;
 }
 
 .lesson-grid {
-	display: grid;
-	gap: 1rem;
-	grid-template-columns: 1fr;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
 }
 
 @media (min-width: 700px) {
-	.lesson-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
+  .lesson-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .new-session-button {
-	display: inline-block;
-	padding: 0.65rem 1rem;
-	border: 1px solid var(--accent);
-	border-radius: 0.5rem;
-	background: var(--accent);
-	color: white;
-	text-decoration: none;
-	font-weight: 600;
-	cursor: pointer;
+  display: inline-block;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .new-session-button:hover {
-	opacity: 0.9;
+  opacity: 0.9;
 }
 
 .practice-session-length {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 0.5rem;
-	margin: -0.5rem 0 1.5rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: -0.5rem 0 1.5rem;
 }
 
 .practice-session-length label {
-	font-weight: 600;
+  font-weight: 600;
 }
 
 .practice-session-length select {
-	min-width: 5rem;
-	padding: 0.5rem 0.65rem;
-	border: 1px solid var(--border);
-	border-radius: 0.5rem;
-	background: var(--surface);
-	color: var(--text);
-	font: inherit;
+  min-width: 5rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
 }
 
 .practice-links {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.75rem 1rem;
-	margin-bottom: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .practice-meta {
-	display: grid;
-	gap: 0.35rem;
-	margin: 1.75rem 0 1.5rem;
-	padding: 0.875rem 0;
-	border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.35rem;
+  margin: 1.75rem 0 1.5rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .practice-meta p {
-	display: flex;
-	align-items: baseline;
-	flex-wrap: wrap;
-	gap: 0.35rem;
-	margin: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
 }
 
 .practice-actions {
-	margin-top: 1.5rem;
+  margin-top: 1.5rem;
 }
 
 .practice-complete {
-	display: grid;
-	gap: 0.75rem;
-	margin-top: 1.5rem;
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
 .practice-complete[hidden] {
-	display: none;
+  display: none;
 }
 
 .practice-complete h2 {
-	margin: 0;
+  margin: 0;
 }
 
 .practice-complete p {
-	margin: 0;
+  margin: 0;
 }
 
 .practice-complete .new-session-button {
-	justify-self: start;
-	margin-top: 0.25rem;
+  justify-self: start;
+  margin-top: 0.25rem;
 }
 
 .progress-summary {
-	padding: 1rem;
-	border: 1px solid var(--border);
-	border-radius: 0.75rem;
-	background: var(--surface);
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
 }
 
 .progress-stats {
-	display: grid;
-	gap: 1rem;
-	margin: 0;
+  display: grid;
+  gap: 1rem;
+  margin: 0;
 }
 
 .progress-stats div {
-	display: flex;
-	justify-content: space-between;
-	gap: 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
 .progress-stats dt {
-	color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .progress-stats dd {
-	margin: 0;
-	font-weight: 700;
+  margin: 0;
+  font-weight: 700;
 }
 
 .progress-list {
-	display: grid;
-	gap: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
 }
 
 .progress-item {
-	display: flex;
-	justify-content: space-between;
-	gap: 1rem;
-	padding: 0.75rem 1rem;
-	border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .progress-item span {
-	color: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .progress-actions {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0.75rem;
-	margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
 .reset-progress-button,
 .secondary-button {
-	padding: 0.65rem 1rem;
-	border: 1px solid var(--border);
-	border-radius: 0.5rem;
-	background: var(--surface);
-	color: var(--text);
-	font: inherit;
-	font-weight: 600;
-	cursor: pointer;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .reset-progress-button {
-	border-color: var(--danger-border);
-	color: var(--danger-text);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
 }
 
 .reset-progress-button:hover {
-	background: var(--danger-surface);
+  background: var(--danger-surface);
 }
 
 .secondary-button:hover {
-	border-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .reset-confirmation {
-	margin-top: 1.5rem;
-	padding: 1rem;
-	border: 1px solid var(--danger-border);
-	border-radius: 0.75rem;
-	background: var(--danger-surface);
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--danger-border);
+  border-radius: 0.75rem;
+  background: var(--danger-surface);
 }
 
 .reset-confirmation[hidden] {
-	display: none;
+  display: none;
 }
 
 .reset-confirmation h2,
 .reset-confirmation p {
-	margin-top: 0;
+  margin-top: 0;
 }
 
 @media (min-width: 700px) {
-	.progress-stats {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-	}
+  .progress-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 
-	.progress-stats div {
-		display: block;
-	}
+  .progress-stats div {
+    display: block;
+  }
 }
 
 /* Practice mode selector */
 .practice-mode-selector {
-	display: grid;
-	gap: 0.5rem;
-	grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-	margin: 1.5rem 0;
-	padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  margin: 1.5rem 0;
+  padding: 0;
 }
 
 .practice-mode-button {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 0.4rem;
-	padding: 0.75rem 0.5rem;
-	border: 1px solid var(--border);
-	border-radius: 0.75rem;
-	background: var(--surface);
-	color: var(--text);
-	font: inherit;
-	font-size: 0.9rem;
-	font-weight: 500;
-	cursor: pointer;
-	transition: all 0.15s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
 }
 
 .practice-mode-button:hover {
-	border-color: var(--accent);
-	background: var(--surface-alt);
+  border-color: var(--accent);
+  background: var(--surface-alt);
 }
 
 .practice-mode-button.active {
-	border-color: var(--accent);
-	background: var(--accent);
-	color: white;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
 }
 
 .mode-icon {
-	display: block;
-	font-size: 1.5rem;
+  display: block;
+  font-size: 1.5rem;
 }
 
 .mode-label {
-	display: block;
-	text-align: center;
-	font-size: 0.85rem;
-	line-height: 1.2;
+  display: block;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.2;
 }
 
 #practice-mode-info {
-	margin: 1rem 0;
-	padding: 0.75rem 1rem;
-	border-left: 3px solid var(--accent);
-	background: var(--surface-alt);
-	border-radius: 0.25rem;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-alt);
+  border-radius: 0.25rem;
 }
 
 #practice-mode-info p {
-	margin: 0;
-	font-size: 0.95rem;
-	color: var(--text-muted);
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
 }
 
 .practice-empty-state {
-	display: grid;
-	gap: 1rem;
-	margin: 2rem 0;
-	padding: 1.5rem;
-	border: 2px dashed var(--border);
-	border-radius: 0.75rem;
-	background: var(--surface);
-	text-align: center;
+  display: grid;
+  gap: 1rem;
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 2px dashed var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  text-align: center;
 }
 
 .practice-empty-state[hidden] {
-	display: none;
+  display: none;
 }
 
 .practice-empty-state p {
-	margin: 0;
-	color: var(--text-muted);
+  margin: 0;
+  color: var(--text-muted);
 }
 
 .practice-empty-state .new-session-button {
-	justify-self: center;
+  justify-self: center;
 }
 
 .learning-links {
