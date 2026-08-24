@@ -3,106 +3,250 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout
-  title="Aaron Holmes | Automation, Software & AI"
-  description="Projects and writing about automation, software systems, AI, and continuous learning."
+  title="Aaron Holmes | Business Systems & Automation"
+  description="Business systems automation, CRM architecture, API integrations, workflow design, and applied AI."
 >
   <main>
     <section class="hero container">
-      <p class="eyebrow">Automation · Software · Systems</p>
+      <p class="eyebrow">Business Systems · Automation · Integrations</p>
 
-      <h1>I build practical systems that make complicated work easier.</h1>
+      <h1>
+        I make complicated systems easier to understand, automate, and maintain.
+      </h1>
 
       <p class="intro">
-        I work at the intersection of business process automation, software, and
-        applied AI. This site documents what I build, what I learn, and the
-        problems I am working through.
+        I work across business process automation, CRM systems, APIs, workflow
+        architecture, and applied AI. My focus is building systems that solve
+        real operational problems without becoming another black box.
       </p>
 
       <div class="hero-links">
-        <a class="primary-link" href="/practice">Open learning app →</a>
-        <a href="#work">View my work</a>
+        <a class="primary-link" href="#experience">Experience</a>
+        <a href="#projects">Selected work</a>
+        <a href="#skills">Skills</a>
       </div>
     </section>
 
-    <section id="work" class="section container">
-      <p class="section-label">Selected work</p>
+    <section id="experience" class="section container">
+      <p class="section-label">Experience</p>
 
-      <h2>Systems over shortcuts.</h2>
+      <div class="role-header">
+        <div>
+          <h2>Business Systems & Automation Specialist</h2>
+          <p class="role-company">Lincoln Health Supply</p>
+        </div>
 
-      <p>
-        I am interested in automation architecture, CRM systems, APIs, technical
-        debt, and using AI where it produces measurable value.
+        <p class="role-meta">Healthcare · DME · Remote</p>
+      </div>
+
+      <p class="role-summary">
+        Owned and improved a large healthcare automation environment spanning
+        Zoho CRM, Zapier, Zoho Flow, Deluge, REST APIs, webhooks, document
+        workflows, and external services. Worked independently with direct
+        access to business leadership, translating operational requirements into
+        maintainable technical systems.
       </p>
+
+      <ul class="experience-list">
+        <li>
+          Managed and reverse-engineered a complex production environment with
+          hundreds of active workflows, workflow rules, and custom functions
+          supporting patient intake, eligibility, prescriptions, documents,
+          orders, and follow-up processes.
+        </li>
+
+        <li>
+          Designed a centralized duplicate-processing system to replace
+          scattered duplicate logic, improving consistency, auditability, and
+          control over ownership, supplier assignment, and request creation.
+        </li>
+
+        <li>
+          Built a custom Zapier integration for pVerify eligibility workflows,
+          including authentication, token handling, request formatting, and
+          normalization of payer and patient data.
+        </li>
+
+        <li>
+          Built and troubleshot prescription and document fax automation across
+          Zoho, document-generation tools, PDF processing, cloud storage, and
+          telecom integrations where standard connector behavior was
+          insufficient.
+        </li>
+
+        <li>
+          Led the systems work required to introduce compression garments as a
+          new product line, integrating the new workflow into existing intake,
+          CRM, request, supplier, and fulfillment processes.
+        </li>
+
+        <li>
+          Prioritized explicit logging, traceability, and documentation so
+          automation behavior could be understood by operations leadership,
+          future technical staff, and outside stakeholders rather than relying
+          on undocumented institutional knowledge.
+        </li>
+
+        <li>
+          Trained another employee on Zapier and Zoho workflows and began
+          transferring system knowledge out of a one-person technical function.
+        </li>
+      </ul>
     </section>
 
-    <section id="learning" class="section container">
-      <p class="section-label">Learning</p>
+    <section id="projects" class="section container">
+      <p class="section-label">Selected technical work</p>
 
-      <h2>Building a better alternative to doom scrolling.</h2>
+      <div class="project-grid">
+        <article class="project-card">
+          <p class="project-kicker">Automation architecture</p>
+          <h2>Duplicate Processing Redesign</h2>
+          <p>
+            Consolidated duplicate-handling rules into a more centralized,
+            auditable process designed to prevent workflow conflicts and
+            preserve intended owner, supplier, and request behavior.
+          </p>
+          <p class="project-tech">
+            Zoho CRM · Deluge · Zapier · Workflow Design
+          </p>
+        </article>
 
-      <p>
-        I am developing a mobile-first learning application for short, useful
-        practice sessions in software, automation, cloud computing, and AI.
-      </p>
+        <article class="project-card">
+          <p class="project-kicker">API integration</p>
+          <h2>pVerify Eligibility Integration</h2>
+          <p>
+            Built a custom Zapier integration for healthcare eligibility checks,
+            including authentication, bearer-token handling, API requests, data
+            normalization, and CRM workflow integration.
+          </p>
+          <p class="project-tech">
+            REST APIs · Authentication · Zapier Developer Platform · JSON
+          </p>
+        </article>
 
-      <div class="learning-links">
-        <a class="primary-link" href="/practice">Open practice</a>
-        <a href="/progress">View progress</a>
+        <article class="project-card">
+          <p class="project-kicker">Systems integration</p>
+          <h2>Prescription & Document Automation</h2>
+          <p>
+            Built and debugged multi-system document and fax workflows where
+            connector limitations, file-access behavior, and integration edge
+            cases required custom workarounds.
+          </p>
+          <p class="project-tech">
+            Zoho · Zapier · PDF Automation · Cloud Storage · Fax APIs
+          </p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">Product launch</p>
+          <h2>Compression Product-Line Integration</h2>
+          <p>
+            Integrated a new healthcare product category into existing CRM and
+            automation processes without rebuilding the surrounding system from
+            scratch.
+          </p>
+          <p class="project-tech">
+            CRM Architecture · Workflow Design · Data Mapping · Operations
+          </p>
+        </article>
       </div>
     </section>
 
-    <section id="about" class="section container">
-      <p class="section-label">About</p>
+    <section id="skills" class="section container">
+      <p class="section-label">Technical toolkit</p>
 
-      <h2>Learning in public and building for real problems.</h2>
+      <div class="skills-grid">
+        <div>
+          <h2>Automation & CRM</h2>
+          <p>
+            Zapier, Zoho CRM, Zoho Flow, workflow architecture, conditional
+            logic, data mapping, debugging, run-history analysis, process
+            documentation
+          </p>
+        </div>
+
+        <div>
+          <h2>APIs & Integrations</h2>
+          <p>
+            REST APIs, webhooks, JSON, OAuth concepts, bearer tokens, API keys,
+            authentication flows, request/response troubleshooting, custom
+            integrations
+          </p>
+        </div>
+
+        <div>
+  <h2>Development & Cloud</h2>
+  <p>
+    JavaScript, Deluge, Python fundamentals, SQL fundamentals, Astro,
+    Git, GitHub, VS Code, Cloudflare Pages, AWS EC2, cloud compute,
+    storage configuration, and Linux environments
+  </p>
+</div>
+
+        <div>
+          <h2>AI & Systems</h2>
+          <p>
+            Applied AI workflows, LLM tooling, RAG concepts, agentic systems,
+            structured outputs, evaluation concepts, system documentation, and
+            automation observability
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section container">
+      <p class="section-label">Earlier work</p>
+
+      <h2>Operations, client communication, and web systems.</h2>
 
       <p>
-        This site is both a professional portfolio and a working software
-        project. I use it to document decisions, test ideas, and improve the
-        tools I use every day.
+        Before Lincoln Health Supply, I built WordPress websites and automated
+        document workflows for a financial-services business operating in
+        Florida and Singapore. My broader background includes many years in
+        customer-facing and operations management roles, which informs how I
+        design technical systems around the people who actually use them.
       </p>
+    </section>
+
+    <section class="section container">
+  <p class="section-label">Education & development</p>
+
+  <h2>Cloud computing and continuous technical study.</h2>
+
+  <p>
+    Hands-on coursework in cloud computing has included deploying and
+    configuring AWS instances with different compute and storage
+    configurations. Additional study includes Python, SQL, computer
+    hardware, APIs, automation, and applied AI, supported by ongoing
+    hands-on projects.
+  </p>
+</section>
+
+    <section class="section container contact-section">
+      <p class="section-label">Contact</p>
+
+      <h2>Interested in automation, integrations, or systems work?</h2>
+
+      <p>
+        I am most interested in roles where technical problem-solving,
+        communication, and business-process understanding overlap.
+      </p>
+
+      <div class="contact-links">
+        <a href="https://www.linkedin.com/" rel="noreferrer">LinkedIn</a>
+      </div>
     </section>
   </main>
 </Layout>
 
 <style>
-  .site-header {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .header-inner {
-    min-height: 4.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .site-name {
-    font-weight: 700;
-    text-decoration: none;
-  }
-
-  nav {
-    display: flex;
-    gap: 1rem;
-  }
-
-  nav a {
-    color: var(--text-muted);
-    text-decoration: none;
-  }
-
-  nav a:hover {
-    color: var(--text);
-  }
-
   .hero {
-    padding-block: 6rem 5rem;
+    padding-block: 5rem 4.5rem;
   }
 
   .eyebrow,
-  .section-label {
+  .section-label,
+  .project-kicker {
     margin: 0 0 1rem;
     color: var(--accent);
     font-size: 0.8rem;
@@ -112,24 +256,25 @@ import Layout from "../layouts/Layout.astro";
   }
 
   h1 {
-    max-width: 850px;
+    max-width: 900px;
     margin: 0;
-    font-size: clamp(2.6rem, 8vw, 5.75rem);
+    font-size: clamp(2.7rem, 7vw, 5.5rem);
     line-height: 0.98;
     letter-spacing: -0.05em;
   }
 
   .intro {
-    max-width: var(--reading-width);
+    max-width: 760px;
     margin: 2rem 0 0;
     color: var(--text-muted);
     font-size: clamp(1.1rem, 2vw, 1.35rem);
   }
 
-  .hero-links {
+  .hero-links,
+  .contact-links {
     display: flex;
     flex-wrap: wrap;
-    gap: 1.25rem;
+    gap: 1rem 1.4rem;
     margin-top: 2rem;
   }
 
@@ -138,34 +283,121 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .section {
-    max-width: var(--reading-width);
+    width: min(calc(100% - 2rem), var(--content-width));
     margin-inline: auto;
     padding-block: 4rem;
     border-top: 1px solid var(--border);
   }
 
-  h2 {
-    margin: 0;
-    font-size: clamp(1.75rem, 4vw, 2.75rem);
+  .section > h2,
+  .role-header h2,
+  .project-card h2,
+  .skills-grid h2 {
+    margin-top: 0;
     line-height: 1.1;
     letter-spacing: -0.03em;
   }
 
-  .section p:last-child {
+  .section > h2 {
+    max-width: 760px;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+  }
+
+  .section > p:not(.section-label) {
+    max-width: var(--reading-width);
     color: var(--text-muted);
     font-size: 1.05rem;
   }
 
-  @media (max-width: 600px) {
-    .header-inner {
-      align-items: flex-start;
-      flex-direction: column;
-      justify-content: center;
-      padding-block: 1rem;
+  .role-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+  }
+
+  .role-header h2 {
+    margin-bottom: 0.35rem;
+    font-size: clamp(1.9rem, 4vw, 2.8rem);
+  }
+
+  .role-company,
+  .role-meta {
+    margin: 0;
+    color: var(--text-muted);
+  }
+
+  .role-summary {
+    max-width: 820px;
+    font-size: 1.08rem;
+  }
+
+  .experience-list {
+    max-width: 850px;
+    margin: 2rem 0 0;
+    padding-left: 1.25rem;
+  }
+
+  .experience-list li + li {
+    margin-top: 1rem;
+  }
+
+  .project-grid,
+  .skills-grid {
+    display: grid;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .project-card,
+  .skills-grid > div {
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    border-radius: 0.85rem;
+    background: var(--surface);
+  }
+
+  .project-card h2,
+  .skills-grid h2 {
+    margin-bottom: 0.8rem;
+    font-size: 1.4rem;
+  }
+
+  .project-card p,
+  .skills-grid p {
+    color: var(--text-muted);
+  }
+
+  .project-tech {
+    margin-bottom: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .contact-section {
+    padding-bottom: 6rem;
+  }
+
+  @media (min-width: 800px) {
+    .project-grid,
+    .skills-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 700px) {
+    .hero {
+      padding-block: 3.5rem;
     }
 
-    .hero {
-      padding-block: 4rem;
+    .role-header {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .section {
+      padding-block: 3rem;
     }
   }
 </style>
