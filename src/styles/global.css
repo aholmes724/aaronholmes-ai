@@ -483,3 +483,10 @@ img {
 .practice-empty-state .new-session-button {
 	justify-self: center;
 }
+
+.learning-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
