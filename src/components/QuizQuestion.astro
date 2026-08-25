@@ -5,6 +5,7 @@ interface Props {
     question: Question;
     mode?: "lesson" | "practice";
 }
+
 const { question, mode = "lesson" } = Astro.props;
 ---
 
@@ -17,6 +18,7 @@ const { question, mode = "lesson" } = Astro.props;
     data-learning-stage={question.learningStage}
     data-mode={mode}
     data-shuffle-answers={question.shuffleAnswers ?? true}
+    data-explanation={question.explanation ?? ""}
 >
     <h2>{question.prompt}</h2>
 
@@ -38,7 +40,17 @@ const { question, mode = "lesson" } = Astro.props;
         }
     </div>
 
-    <p class="feedback" aria-live="polite"></p>
+    <div class="review" hidden aria-live="polite">
+        <p class="result"></p>
+
+        <p class="correct-answer" hidden>
+            <strong>Correct answer:</strong>{"  "}
+            <span></span>
+        </p>
+
+        <p class="feedback"></p>
+    </div>
+
     <button class="try-again" type="button" hidden> Try again </button>
 </section>
 
@@ -61,18 +73,35 @@ const { question, mode = "lesson" } = Astro.props;
             });
         }
 
+        const review = quiz.querySelector<HTMLElement>(".review");
+        const result = quiz.querySelector<HTMLElement>(".result");
         const feedback = quiz.querySelector<HTMLElement>(".feedback");
+
+        const correctAnswerRow =
+            quiz.querySelector<HTMLElement>(".correct-answer");
+
+        const correctAnswerText =
+            correctAnswerRow?.querySelector<HTMLElement>("span");
 
         const tryAgain = quiz.querySelector<HTMLButtonElement>(".try-again");
 
+        const correctInput = answerList.find(
+            (answer) => answer.dataset.correct === "true",
+        );
+
+        const correctOption =
+            correctInput?.closest<HTMLElement>(".answer-option");
+
+        const correctText = correctOption
+            ?.querySelector<HTMLElement>("span")
+            ?.textContent?.trim();
+
         answers.forEach((answer) => {
             answer.addEventListener("change", () => {
-                if (!feedback) return;
+                if (!review || !result || !feedback) return;
 
                 const isCorrect = answer.dataset.correct === "true";
-
                 const questionId = quiz.dataset.questionId;
-
                 const answerId = answer.dataset.answerId;
 
                 quiz.dispatchEvent(
@@ -86,13 +115,37 @@ const { question, mode = "lesson" } = Astro.props;
                     }),
                 );
 
-                const answerOption =
+                const selectedOption =
                     answer.closest<HTMLElement>(".answer-option");
 
-                if (answerOption) {
-                    answerOption.dataset.result = isCorrect
+                if (selectedOption) {
+                    selectedOption.dataset.result = isCorrect
                         ? "correct"
                         : "incorrect";
+                }
+
+                if (!isCorrect && correctOption) {
+                    correctOption.dataset.result = "correct";
+                }
+
+                review.hidden = false;
+
+                result.textContent = isCorrect ? "Correct." : "Not quite.";
+
+                const canonicalExplanation = quiz.dataset.explanation?.trim();
+
+                feedback.textContent = canonicalExplanation || "";
+
+                if (
+                    !isCorrect &&
+                    correctAnswerRow &&
+                    correctAnswerText &&
+                    correctText
+                ) {
+                    correctAnswerText.textContent = correctText;
+                    correctAnswerRow.hidden = false;
+                } else if (correctAnswerRow) {
+                    correctAnswerRow.hidden = true;
                 }
 
                 if (
@@ -102,10 +155,6 @@ const { question, mode = "lesson" } = Astro.props;
                 ) {
                     tryAgain.hidden = false;
                 }
-
-                feedback.textContent =
-                    answer.dataset.feedback ??
-                    (isCorrect ? "Correct." : "Not quite.");
 
                 answers.forEach((quizAnswer) => {
                     quizAnswer.disabled = true;
@@ -126,8 +175,24 @@ const { question, mode = "lesson" } = Astro.props;
                 }
             });
 
+            if (review) {
+                review.hidden = true;
+            }
+
+            if (result) {
+                result.textContent = "";
+            }
+
             if (feedback) {
                 feedback.textContent = "";
+            }
+
+            if (correctAnswerRow) {
+                correctAnswerRow.hidden = true;
+            }
+
+            if (correctAnswerText) {
+                correctAnswerText.textContent = "";
             }
 
             tryAgain.hidden = true;
