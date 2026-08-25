@@ -1,5 +1,7 @@
-import type { PracticeAttempt } from "./attempts";
-
+import {
+    getWeakConcepts,
+    type PracticeAttempt,
+} from "./attempts";
 export interface PracticeMode {
     id: string;
     label: string;
@@ -141,36 +143,9 @@ export function matchesWeakConcepts(
 export function getWeakConceptsFromAttempts(
     attempts: PracticeAttempt[],
 ): string[] {
-    if (!attempts.length) return [];
-
-    const conceptStats = new Map<
-        string,
-        { attempts: number; correct: number }
-    >();
-
-    attempts.forEach((attempt) => {
-        attempt.concepts?.forEach((concept) => {
-            const stat = conceptStats.get(concept) ?? {
-                attempts: 0,
-                correct: 0,
-            };
-            stat.attempts += 1;
-            if (attempt.correct) stat.correct += 1;
-            conceptStats.set(concept, stat);
-        });
-    });
-
-    const weakConcepts: string[] = [];
-    conceptStats.forEach((stat, concept) => {
-        if (stat.attempts >= 2) {
-            const accuracy = stat.correct / stat.attempts;
-            if (accuracy < 0.7) {
-                weakConcepts.push(concept);
-            }
-        }
-    });
-
-    return weakConcepts;
+    return getWeakConcepts(attempts).map(
+        (concept) => concept.concept,
+    );
 }
 
 /** Server-side/testing convenience wrapper around matchesMode / matchesWeakConcepts. */

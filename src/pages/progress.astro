@@ -49,7 +49,11 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="progress-actions">
             <a class="new-session-button" href="/practice">Practice again</a>
-            <button id="reset-progress" class="reset-progress-button" type="button">
+            <button
+                id="reset-progress"
+                class="reset-progress-button"
+                type="button"
+            >
                 Reset all progress
             </button>
         </div>
@@ -66,10 +70,18 @@ import Layout from "../layouts/Layout.astro";
                 device. This cannot be undone.
             </p>
             <div class="progress-actions">
-                <button id="confirm-reset" class="reset-progress-button" type="button">
+                <button
+                    id="confirm-reset"
+                    class="reset-progress-button"
+                    type="button"
+                >
                     Confirm reset
                 </button>
-                <button id="cancel-reset" class="secondary-button" type="button">
+                <button
+                    id="cancel-reset"
+                    class="secondary-button"
+                    type="button"
+                >
                     Cancel
                 </button>
             </div>
@@ -80,10 +92,10 @@ import Layout from "../layouts/Layout.astro";
 <script>
     import {
         clearPracticeAttempts,
+        getConceptMastery,
         readPracticeAttempts,
         readSessionSummaries,
     } from "../data/attempts";
-    import { PRACTICE_MODES } from "../data/practice-modes";
 
     const setText = (id: string, value: string) => {
         const element = document.querySelector<HTMLElement>(`#${id}`);
@@ -95,7 +107,9 @@ import Layout from "../layouts/Layout.astro";
         groups: Map<string, { attempts: number; correct: number }>,
         emptyMessage: string,
     ) => {
-        const container = document.querySelector<HTMLElement>(`#${containerId}`);
+        const container = document.querySelector<HTMLElement>(
+            `#${containerId}`,
+        );
         if (!container) return;
 
         if (!groups.size) {
@@ -122,8 +136,45 @@ import Layout from "../layouts/Layout.astro";
         );
     };
 
+    const renderConceptMastery = () => {
+        const container =
+            document.querySelector<HTMLElement>("#concept-progress");
+
+        if (!container) return;
+
+        const mastery = getConceptMastery();
+
+        if (!mastery.length) {
+            container.innerHTML = "<p>No concept data yet.</p>";
+            return;
+        }
+
+        container.replaceChildren(
+            ...mastery.map((concept) => {
+                const item = document.createElement("div");
+                item.className = "progress-item";
+
+                const label = document.createElement("strong");
+                label.textContent = concept.concept;
+
+                const score = document.createElement("span");
+
+                const percentage = Math.round(concept.accuracy * 100);
+
+                score.textContent =
+                    `${concept.correct}/${concept.attempts} ` +
+                    `(${percentage}%) · ${concept.status}`;
+
+                item.append(label, score);
+
+                return item;
+            }),
+        );
+    };
+
     const renderSessionHistory = () => {
-        const container = document.querySelector<HTMLElement>("#session-history");
+        const container =
+            document.querySelector<HTMLElement>("#session-history");
         if (!container) return;
 
         const sessions = [...readSessionSummaries()].sort(
@@ -143,13 +194,18 @@ import Layout from "../layouts/Layout.astro";
                 item.className = "progress-item";
 
                 const label = document.createElement("strong");
-                label.textContent = PRACTICE_MODES[session.mode]?.label ?? session.mode;
+                label.textContent =
+                    PRACTICE_MODES[session.mode]?.label ?? session.mode;
 
                 const score = document.createElement("span");
                 const percentage = session.answeredCount
-                    ? Math.round((session.correctCount / session.answeredCount) * 100)
+                    ? Math.round(
+                          (session.correctCount / session.answeredCount) * 100,
+                      )
                     : 0;
-                const completedAt = new Date(session.completedAt).toLocaleString();
+                const completedAt = new Date(
+                    session.completedAt,
+                ).toLocaleString();
                 score.textContent = `${session.correctCount}/${session.answeredCount} (${percentage}%) · ${completedAt}`;
 
                 item.append(label, score);
@@ -160,7 +216,9 @@ import Layout from "../layouts/Layout.astro";
 
     const renderProgress = () => {
         const attempts = readPracticeAttempts();
-        const correctAttempts = attempts.filter((attempt) => attempt.correct).length;
+        const correctAttempts = attempts.filter(
+            (attempt) => attempt.correct,
+        ).length;
         const accuracy = attempts.length
             ? Math.round((correctAttempts / attempts.length) * 100)
             : 0;
@@ -170,33 +228,36 @@ import Layout from "../layouts/Layout.astro";
         setText("overall-accuracy", `${accuracy}%`);
 
         const topics = new Map<string, { attempts: number; correct: number }>();
-        const concepts = new Map<string, { attempts: number; correct: number }>();
+        
 
         attempts.forEach((attempt) => {
             if (attempt.topic) {
-                const result = topics.get(attempt.topic) ?? { attempts: 0, correct: 0 };
+                const result = topics.get(attempt.topic) ?? {
+                    attempts: 0,
+                    correct: 0,
+                };
                 result.attempts += 1;
                 if (attempt.correct) result.correct += 1;
                 topics.set(attempt.topic, result);
             }
 
-            attempt.concepts?.forEach((concept) => {
-                const result = concepts.get(concept) ?? { attempts: 0, correct: 0 };
-                result.attempts += 1;
-                if (attempt.correct) result.correct += 1;
-                concepts.set(concept, result);
-            });
+            
         });
 
         renderBreakdown("topic-progress", topics, "No topic data yet.");
-        renderBreakdown("concept-progress", concepts, "No concept data yet.");
+        renderConceptMastery();
         renderSessionHistory();
     };
 
-    const resetProgress = document.querySelector<HTMLButtonElement>("#reset-progress");
-    const resetConfirmation = document.querySelector<HTMLElement>("#reset-confirmation");
-    const confirmReset = document.querySelector<HTMLButtonElement>("#confirm-reset");
-    const cancelReset = document.querySelector<HTMLButtonElement>("#cancel-reset");
+    const resetProgress =
+        document.querySelector<HTMLButtonElement>("#reset-progress");
+    const resetConfirmation = document.querySelector<HTMLElement>(
+        "#reset-confirmation",
+    );
+    const confirmReset =
+        document.querySelector<HTMLButtonElement>("#confirm-reset");
+    const cancelReset =
+        document.querySelector<HTMLButtonElement>("#cancel-reset");
 
     resetProgress?.addEventListener("click", () => {
         if (resetConfirmation) resetConfirmation.hidden = false;
