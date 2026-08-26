@@ -2,7 +2,6 @@ export const QUESTION_FEEDBACK_STORAGE_KEY = "aaronholmes.question-feedback";
 export const QUESTION_REVIEW_STORAGE_KEY = "aaronholmes.question-review-state";
 
 export const QUESTION_FEEDBACK_REASONS = [
-    "general-quality",
     "wording-gives-away-answer",
     "distractors-unrealistic",
     "answer-too-obvious",
@@ -23,7 +22,7 @@ export type QuestionReviewStatus =
 export interface QuestionFeedback {
     id: string;
     questionId: string;
-    reason: QuestionFeedbackReason;
+    reason?: QuestionFeedbackReason;
     note?: string;
     createdAt: string;
     topic?: string;
@@ -44,7 +43,7 @@ function deduplicateQuestionFeedback(
     const byQuestionAndReason = new Map<string, QuestionFeedback>();
 
     feedback.forEach((entry) => {
-        const key = `${entry.questionId}::${entry.reason}`;
+        const key = `${entry.questionId}::${entry.reason ?? "bare"}`;
         const existing = byQuestionAndReason.get(key);
 
         if (!existing) {
@@ -197,7 +196,6 @@ export function getFeedbackReasonLabel(
     reason: QuestionFeedbackReason,
 ): string {
     const labels: Record<QuestionFeedbackReason, string> = {
-        "general-quality": "General quality issue",
         "wording-gives-away-answer": "Wording gives away the answer",
         "distractors-unrealistic": "Distractors are unrealistic",
         "answer-too-obvious": "Answer is too obvious",
