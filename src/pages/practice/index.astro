@@ -8,10 +8,7 @@ const practiceQuestions = allQuestions;
 ---
 
 <Layout title="Practice | Aaron Holmes">
-    <main
-        class="container"
-        data-session-length={Math.min(practiceQuestions.length, 5)}
-    >
+    <main class="container" data-session-length={Math.min(practiceQuestions.length, 5)}>
         <div class="practice-links">
             <a href="/learn">← Back to Learn</a>
             <a href="/progress">View progress</a>
@@ -20,19 +17,12 @@ const practiceQuestions = allQuestions;
         <h1>Practice</h1>
 
         <div id="practice-mode-selector" class="practice-mode-selector">
-            {
-                Object.entries(PRACTICE_MODES).map(([modeId, mode]) => (
-                    <button
-                        class="practice-mode-button"
-                        data-mode={modeId}
-                        type="button"
-                        title={mode.description}
-                    >
-                        <span class="mode-icon">{mode.icon}</span>
-                        <span class="mode-label">{mode.label}</span>
-                    </button>
-                ))
-            }
+            {Object.entries(PRACTICE_MODES).map(([modeId, mode]) => (
+                <button class="practice-mode-button" data-mode={modeId} type="button" title={mode.description}>
+                    <span class="mode-icon">{mode.icon}</span>
+                    <span class="mode-label">{mode.label}</span>
+                </button>
+            ))}
         </div>
 
         <div id="practice-mode-info">
@@ -50,13 +40,8 @@ const practiceQuestions = allQuestions;
         </div>
 
         <div id="practice-empty-state" class="practice-empty-state" hidden>
-            <p>
-                No questions available in this mode yet. Complete more practice
-                sessions to build up your weak concept history.
-            </p>
-            <a href="/practice?mode=all" class="new-session-button"
-                >Try another mode</a
-            >
+            <p>No questions available in this mode yet. Complete more practice sessions to build up your weak concept history.</p>
+            <a href="/practice?mode=all" class="new-session-button">Try another mode</a>
         </div>
 
         <div class="practice-meta">
@@ -64,11 +49,8 @@ const practiceQuestions = allQuestions;
                 <span>Question</span>
                 <strong id="current-question-number">1</strong>
                 <span>of</span>
-                <strong id="session-length"
-                    >{Math.min(practiceQuestions.length, 5)}</strong
-                >
+                <strong id="session-length">{Math.min(practiceQuestions.length, 5)}</strong>
             </p>
-
             <p class="practice-score">
                 <span>Score:</span>
                 <strong id="practice-score">0</strong>
@@ -78,41 +60,22 @@ const practiceQuestions = allQuestions;
         </div>
 
         <div id="practice-questions">
-            {
-                practiceQuestions.map((question) => (
-                    <div hidden data-session-question>
-                        <QuizQuestion question={question} mode="practice" />
-                    </div>
-                ))
-            }
+            {practiceQuestions.map((question) => (
+                <div hidden data-session-question>
+                    <QuizQuestion question={question} mode="practice" />
+                </div>
+            ))}
         </div>
 
         <div id="next-question-container" class="practice-actions" hidden>
-            <button
-                id="next-question"
-                class="new-session-button"
-                type="button"
-                hidden
-            >
-                Next question
-            </button>
+            <button id="next-question" class="new-session-button" type="button" hidden>Next question</button>
         </div>
 
-        <section
-            id="session-complete"
-            class="practice-complete"
-            hidden
-            aria-labelledby="complete-heading"
-        >
+        <section id="session-complete" class="practice-complete" hidden aria-labelledby="complete-heading">
             <h2 id="complete-heading">Session complete</h2>
-            <p>
-                Final score: <strong id="final-score">0</strong> /
-                <strong id="final-answered">0</strong>
-            </p>
+            <p>Final score: <strong id="final-score">0</strong> / <strong id="final-answered">0</strong></p>
             <p>Accuracy: <strong id="final-accuracy">0%</strong></p>
-            <a id="new-session" class="new-session-button" href="/practice"
-                >New session</a
-            >
+            <a id="new-session" class="new-session-button" href="/practice">New session</a>
         </section>
     </main>
 </Layout>
@@ -134,44 +97,20 @@ const practiceQuestions = allQuestions;
     const sessionStartedAt = new Date().toISOString();
     let sessionSummarySaved = false;
 
-    const practiceScore =
-        document.querySelector<HTMLElement>("#practice-score");
-
-    const answeredCount =
-        document.querySelector<HTMLElement>("#answered-count");
-
+    const practiceScore = document.querySelector<HTMLElement>("#practice-score");
+    const answeredCount = document.querySelector<HTMLElement>("#answered-count");
     const answeredQuestions = new Set<string>();
-
-    const sessionComplete =
-        document.querySelector<HTMLElement>("#session-complete");
-
-    const nextQuestion =
-        document.querySelector<HTMLButtonElement>("#next-question");
-    const nextQuestionContainer = document.querySelector<HTMLElement>(
-        "#next-question-container",
-    );
-
-    const currentQuestionNumber = document.querySelector<HTMLElement>(
-        "#current-question-number",
-    );
-
+    const sessionComplete = document.querySelector<HTMLElement>("#session-complete");
+    const nextQuestion = document.querySelector<HTMLButtonElement>("#next-question");
+    const nextQuestionContainer = document.querySelector<HTMLElement>("#next-question-container");
+    const currentQuestionNumber = document.querySelector<HTMLElement>("#current-question-number");
     const finalScore = document.querySelector<HTMLElement>("#final-score");
-    const finalAnswered =
-        document.querySelector<HTMLElement>("#final-answered");
-    const finalAccuracy =
-        document.querySelector<HTMLElement>("#final-accuracy");
-    const sessionLengthSelect = document.querySelector<HTMLSelectElement>(
-        "#session-length-select",
-    );
-    const newSession =
-        document.querySelector<HTMLAnchorElement>("#new-session");
-    const sessionCandidates = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-session-question]"),
-    );
-
-    const modeButtons = document.querySelectorAll<HTMLButtonElement>(
-        ".practice-mode-button",
-    );
+    const finalAnswered = document.querySelector<HTMLElement>("#final-answered");
+    const finalAccuracy = document.querySelector<HTMLElement>("#final-accuracy");
+    const sessionLengthSelect = document.querySelector<HTMLSelectElement>("#session-length-select");
+    const newSession = document.querySelector<HTMLAnchorElement>("#new-session");
+    const sessionCandidates = Array.from(document.querySelectorAll<HTMLElement>("[data-session-question]"));
+    const modeButtons = document.querySelectorAll<HTMLButtonElement>(".practice-mode-button");
     const practiceDescription = document.getElementById("practice-description");
     const practiceEmptyState = document.getElementById("practice-empty-state");
 
@@ -180,56 +119,30 @@ const practiceQuestions = allQuestions;
     const topic = searchParams.get("topic");
     const requestedLength = searchParams.get("length");
     const validLengths = ["5", "10", "20", "all"];
-    const selectedLength = validLengths.includes(requestedLength ?? "")
-        ? requestedLength!
-        : "5";
+    const selectedLength = validLengths.includes(requestedLength ?? "") ? requestedLength! : "5";
 
-    // Update mode selector UI
     modeButtons.forEach((button) => {
         const btnMode = button.dataset.mode ?? "";
         button.classList.toggle("active", btnMode === mode);
         button.addEventListener("click", () => {
-            const newUrl = `/practice?mode=${btnMode}`;
-            window.location.href = newUrl;
+            window.location.href = `/practice?mode=${btnMode}`;
         });
     });
 
-    // Update description
-    if (practiceDescription) {
-        practiceDescription.textContent = getModeDescription(mode);
-    }
+    if (practiceDescription) practiceDescription.textContent = getModeDescription(mode);
+    if (sessionLengthSelect) sessionLengthSelect.value = selectedLength;
 
-    if (sessionLengthSelect) {
-        sessionLengthSelect.value = selectedLength;
-    }
-
-    const buildPracticeUrl = (
-        nextMode: string | null,
-        nextTopic: string | null,
-        nextLength: string,
-    ) => {
+    const buildPracticeUrl = (nextMode: string | null, nextTopic: string | null, nextLength: string) => {
         const params = new URLSearchParams();
-
         const modeToUse = nextMode ?? mode;
-        if (modeToUse && modeToUse !== "all") {
-            params.set("mode", modeToUse);
-        }
-
-        if (nextTopic && nextTopic !== "all") {
-            params.set("topic", nextTopic);
-        }
-
-        if (nextLength !== "5") {
-            params.set("length", nextLength);
-        }
-
+        if (modeToUse && modeToUse !== "all") params.set("mode", modeToUse);
+        if (nextTopic && nextTopic !== "all") params.set("topic", nextTopic);
+        if (nextLength !== "5") params.set("length", nextLength);
         const query = params.toString();
         return query ? `/practice?${query}` : "/practice";
     };
 
-    if (newSession) {
-        newSession.href = buildPracticeUrl(mode, topic, selectedLength);
-    }
+    if (newSession) newSession.href = buildPracticeUrl(mode, topic, selectedLength);
 
     const toQuestionMeta = (quiz: HTMLElement | null): QuestionMeta => ({
         topic: quiz?.dataset.topic,
@@ -237,63 +150,92 @@ const practiceQuestions = allQuestions;
         learningStage: quiz?.dataset.learningStage,
     });
 
-    // Filter questions by mode using shared mode rules.
-    // Weak mode is now targeted: rank concepts using the same logic as Focus next,
-    // then prioritize questions whose primary mastery concept matches that ranking.
+    const getQuiz = (question: HTMLElement) =>
+        question.querySelector<HTMLElement>(".quiz-question");
+
+    const getQuestionId = (question: HTMLElement) =>
+        getQuiz(question)?.dataset.questionId ?? "";
+
+    const getMasteryConcept = (question: HTMLElement) =>
+        getQuiz(question)?.dataset.masteryConcept ?? "";
+
+    const shuffle = <T>(items: T[]): T[] => {
+        const result = [...items];
+        for (let index = result.length - 1; index > 0; index -= 1) {
+            const swapIndex = Math.floor(Math.random() * (index + 1));
+            [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+        }
+        return result;
+    };
+
     let filteredByMode: HTMLElement[] = [];
 
     if (mode === "weak") {
         const attempts = readPracticeAttempts();
         const targetConcepts = getTargetConcepts(attempts, 10);
-        const targetRank = new Map(
-            targetConcepts.map((concept, index) => [concept.concept, index]),
+        const targetRank = new Map(targetConcepts.map((concept, index) => [concept.concept, index]));
+
+        // Questions answered in the last 10 attempts are considered recent. We prefer
+        // other questions first, but keep recent ones as a fallback so short concept
+        // banks can still produce a complete session.
+        const recentQuestionIds = new Set(
+            [...attempts]
+                .sort((first, second) =>
+                    new Date(second.answeredAt).getTime() - new Date(first.answeredAt).getTime(),
+                )
+                .slice(0, 10)
+                .map((attempt) => attempt.questionId),
         );
 
-        filteredByMode = sessionCandidates
-            .filter((question) => {
-                const quiz =
-                    question.querySelector<HTMLElement>(".quiz-question");
-                const masteryConcept = quiz?.dataset.masteryConcept;
-
-                return Boolean(
-                    masteryConcept && targetRank.has(masteryConcept),
-                );
-            })
-            .sort((first, second) => {
-                const firstConcept =
-                    first.querySelector<HTMLElement>(".quiz-question")?.dataset
-                        .masteryConcept ?? "";
-                const secondConcept =
-                    second.querySelector<HTMLElement>(".quiz-question")?.dataset
-                        .masteryConcept ?? "";
-
-                const firstRank =
-                    targetRank.get(firstConcept) ?? Number.MAX_SAFE_INTEGER;
-                const secondRank =
-                    targetRank.get(secondConcept) ?? Number.MAX_SAFE_INTEGER;
-
-                if (firstRank !== secondRank) {
-                    return firstRank - secondRank;
-                }
-
-                return Math.random() - 0.5;
-            });
-    } else {
-        filteredByMode = sessionCandidates.filter((question) => {
-            const quiz = question.querySelector<HTMLElement>(".quiz-question");
-
-            if (!quiz) return false;
-
-            // Backward-compatible topic filter, only meaningful for "all" mode.
-            if (mode === "all" && topic && quiz.dataset.topic !== topic) {
-                return false;
-            }
-
-            return matchesMode(toQuestionMeta(quiz), mode);
+        const targetedCandidates = sessionCandidates.filter((question) => {
+            const masteryConcept = getMasteryConcept(question);
+            return Boolean(masteryConcept && targetRank.has(masteryConcept));
         });
 
-        // Non-targeted modes remain randomized.
-        filteredByMode.sort(() => Math.random() - 0.5);
+        // Round-robin across ranked concepts instead of exhausting every question
+        // from the top concept before moving to the next one.
+        const buckets = new Map<string, HTMLElement[]>();
+        targetConcepts.forEach((target) => buckets.set(target.concept, []));
+
+        targetedCandidates.forEach((question) => {
+            const concept = getMasteryConcept(question);
+            buckets.get(concept)?.push(question);
+        });
+
+        buckets.forEach((questions, concept) => {
+            const fresh = shuffle(
+                questions.filter((question) => !recentQuestionIds.has(getQuestionId(question))),
+            );
+            const recent = shuffle(
+                questions.filter((question) => recentQuestionIds.has(getQuestionId(question))),
+            );
+            buckets.set(concept, [...fresh, ...recent]);
+        });
+
+        const ordered: HTMLElement[] = [];
+        let addedQuestion = true;
+
+        while (addedQuestion) {
+            addedQuestion = false;
+            for (const target of targetConcepts) {
+                const bucket = buckets.get(target.concept);
+                const next = bucket?.shift();
+                if (next) {
+                    ordered.push(next);
+                    addedQuestion = true;
+                }
+            }
+        }
+
+        filteredByMode = ordered;
+    } else {
+        filteredByMode = sessionCandidates.filter((question) => {
+            const quiz = getQuiz(question);
+            if (!quiz) return false;
+            if (mode === "all" && topic && quiz.dataset.topic !== topic) return false;
+            return matchesMode(toQuestionMeta(quiz), mode);
+        });
+        filteredByMode = shuffle(filteredByMode);
     }
 
     const sessionQuestions = filteredByMode.slice(
@@ -301,23 +243,16 @@ const practiceQuestions = allQuestions;
         selectedLength === "all" ? undefined : Number(selectedLength),
     );
 
-    // Generic empty state: applies to weak concepts and to any domain with no questions yet
-    if (practiceEmptyState) {
-        practiceEmptyState.hidden = sessionQuestions.length !== 0;
-    }
+    if (practiceEmptyState) practiceEmptyState.hidden = sessionQuestions.length !== 0;
 
-    // Hide all, then show only the current question
     sessionCandidates.forEach((question) => {
         const sessionIndex = sessionQuestions.indexOf(question);
         question.hidden = sessionIndex !== 0;
     });
 
     const sessionLength = sessionQuestions.length;
-    const sessionLengthElement =
-        document.querySelector<HTMLElement>("#session-length");
-    if (sessionLengthElement) {
-        sessionLengthElement.textContent = sessionLength.toString();
-    }
+    const sessionLengthElement = document.querySelector<HTMLElement>("#session-length");
+    if (sessionLengthElement) sessionLengthElement.textContent = sessionLength.toString();
 
     let correctAnswers = 0;
     let totalAnswered = 0;
@@ -332,16 +267,11 @@ const practiceQuestions = allQuestions;
 
         const questionId = customEvent.detail.questionId;
         const answerId = customEvent.detail.answerId;
-
-        if (!questionId || !answerId || answeredQuestions.has(questionId)) {
-            return;
-        }
+        if (!questionId || !answerId || answeredQuestions.has(questionId)) return;
 
         answeredQuestions.add(questionId);
 
-        const quiz = (event.target as HTMLElement | null)?.closest<HTMLElement>(
-            ".quiz-question",
-        );
+        const quiz = (event.target as HTMLElement | null)?.closest<HTMLElement>(".quiz-question");
         const concepts = quiz?.dataset.concepts?.split(",").filter(Boolean);
         const difficulty = quiz?.dataset.difficulty;
         const learningStage = quiz?.dataset.learningStage;
@@ -356,67 +286,43 @@ const practiceQuestions = allQuestions;
             ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
             ...(concepts?.length && { concepts }),
             ...(masteryConcept && { masteryConcept }),
-            ...(difficulty && {
-                difficulty: difficulty as
-                    "beginner" | "intermediate" | "advanced",
-            }),
-            ...(learningStage && {
-                learningStage: learningStage as
-                    "recognition" | "understanding" | "application",
-            }),
+            ...(difficulty && { difficulty: difficulty as "beginner" | "intermediate" | "advanced" }),
+            ...(learningStage && { learningStage: learningStage as "recognition" | "understanding" | "application" }),
         });
 
         totalAnswered += 1;
-
-        if (customEvent.detail.correct) {
-            correctAnswers += 1;
-        }
-
-        if (practiceScore) {
-            practiceScore.textContent = correctAnswers.toString();
-        }
-
-        if (answeredCount) {
-            answeredCount.textContent = totalAnswered.toString();
-        }
+        if (customEvent.detail.correct) correctAnswers += 1;
+        if (practiceScore) practiceScore.textContent = correctAnswers.toString();
+        if (answeredCount) answeredCount.textContent = totalAnswered.toString();
 
         if (totalAnswered === sessionLength) {
             if (finalScore) finalScore.textContent = correctAnswers.toString();
-            if (finalAnswered)
-                finalAnswered.textContent = totalAnswered.toString();
-            if (finalAccuracy) {
-                finalAccuracy.textContent = `${Math.round((correctAnswers / sessionLength) * 100)}%`;
+            if (finalAnswered) finalAnswered.textContent = totalAnswered.toString();
+            if (finalAccuracy) finalAccuracy.textContent = `${Math.round((correctAnswers / sessionLength) * 100)}%`;
+            if (nextQuestion) {
+                nextQuestion.textContent = "Finish session";
+                nextQuestion.hidden = false;
             }
-            if (nextQuestion) nextQuestion.textContent = "Finish session";
-            if (nextQuestion) nextQuestion.hidden = false;
             if (nextQuestionContainer) nextQuestionContainer.hidden = false;
             return;
         }
 
-        if (nextQuestion) nextQuestion.textContent = "Next question";
-        if (nextQuestion) nextQuestion.hidden = false;
+        if (nextQuestion) {
+            nextQuestion.textContent = "Next question";
+            nextQuestion.hidden = false;
+        }
         if (nextQuestionContainer) nextQuestionContainer.hidden = false;
     });
 
     sessionLengthSelect?.addEventListener("change", () => {
-        window.location.href = buildPracticeUrl(
-            mode,
-            topic,
-            sessionLengthSelect.value,
-        );
+        window.location.href = buildPracticeUrl(mode, topic, sessionLengthSelect.value);
     });
 
     nextQuestion?.addEventListener("click", () => {
-        if (
-            !answeredQuestions.has(
-                sessionQuestions[
-                    currentQuestionIndex
-                ]?.querySelector<HTMLElement>(".quiz-question")?.dataset
-                    .questionId ?? "",
-            )
-        ) {
-            return;
-        }
+        const currentId = sessionQuestions[currentQuestionIndex]
+            ? getQuestionId(sessionQuestions[currentQuestionIndex])
+            : "";
+        if (!answeredQuestions.has(currentId)) return;
 
         if (currentQuestionIndex === sessionQuestions.length - 1) {
             sessionQuestions[currentQuestionIndex].hidden = true;
@@ -443,12 +349,7 @@ const practiceQuestions = allQuestions;
         sessionQuestions[currentQuestionIndex].hidden = true;
         currentQuestionIndex += 1;
         sessionQuestions[currentQuestionIndex].hidden = false;
-
-        if (currentQuestionNumber) {
-            currentQuestionNumber.textContent = (
-                currentQuestionIndex + 1
-            ).toString();
-        }
+        if (currentQuestionNumber) currentQuestionNumber.textContent = (currentQuestionIndex + 1).toString();
         nextQuestion.hidden = true;
         if (nextQuestionContainer) nextQuestionContainer.hidden = true;
     });
