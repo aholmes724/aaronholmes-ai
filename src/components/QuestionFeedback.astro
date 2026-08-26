@@ -1,0 +1,108 @@
+<div class="question-feedback" data-question-feedback>
+    <button class="question-feedback-toggle secondary-button" type="button">
+        Flag question
+    </button>
+
+    <form class="question-feedback-form" hidden>
+        <label>
+            What should we improve?
+            <select name="reason" required>
+                <option value="wording-gives-away-answer">Wording gives away the answer</option>
+                <option value="distractors-unrealistic">Distractors are unrealistic</option>
+                <option value="answer-too-obvious">Answer is too obvious</option>
+                <option value="possibly-incorrect">Question or answer may be incorrect</option>
+                <option value="explanation-unclear">Explanation is unclear</option>
+                <option value="other">Other</option>
+            </select>
+        </label>
+
+        <label>
+            Note <span class="question-feedback-optional">(optional)</span>
+            <textarea
+                name="note"
+                rows="2"
+                maxlength="500"
+                placeholder="What tipped you off or should change?"
+            ></textarea>
+        </label>
+
+        <div class="question-feedback-actions">
+            <button class="new-session-button" type="submit">Save flag</button>
+            <button class="question-feedback-cancel secondary-button" type="button">
+                Cancel
+            </button>
+        </div>
+    </form>
+
+    <p class="question-feedback-saved" hidden aria-live="polite">
+        Saved. This feedback can inform future question review and generation.
+    </p>
+</div>
+
+<script>
+    import {
+        saveQuestionFeedback,
+        type QuestionFeedbackReason,
+    } from "../data/question-feedback";
+
+    document
+        .querySelectorAll<HTMLElement>("[data-question-feedback]")
+        .forEach((container) => {
+            const quiz = container.closest<HTMLElement>(".quiz-question");
+            const toggle = container.querySelector<HTMLButtonElement>(
+                ".question-feedback-toggle",
+            );
+            const form = container.querySelector<HTMLFormElement>(
+                ".question-feedback-form",
+            );
+            const cancel = container.querySelector<HTMLButtonElement>(
+                ".question-feedback-cancel",
+            );
+            const saved = container.querySelector<HTMLElement>(
+                ".question-feedback-saved",
+            );
+
+            toggle?.addEventListener("click", () => {
+                if (!form) return;
+                form.hidden = !form.hidden;
+                if (!form.hidden) {
+                    form.querySelector<HTMLSelectElement>("select")?.focus();
+                }
+            });
+
+            cancel?.addEventListener("click", () => {
+                if (form) form.hidden = true;
+                toggle?.focus();
+            });
+
+            form?.addEventListener("submit", (event) => {
+                event.preventDefault();
+                if (!quiz) return;
+
+                const data = new FormData(form);
+                const reason = data.get("reason") as QuestionFeedbackReason;
+                const note = data.get("note")?.toString().trim();
+
+                saveQuestionFeedback({
+                    questionId: quiz.dataset.questionId ?? "unknown",
+                    reason,
+                    ...(note && { note }),
+                    ...(quiz.dataset.topic && { topic: quiz.dataset.topic }),
+                    ...(quiz.dataset.masteryConcept && {
+                        masteryConcept: quiz.dataset.masteryConcept,
+                    }),
+                    ...(quiz.dataset.learningObjective && {
+                        learningObjective: quiz.dataset.learningObjective,
+                    }),
+                    ...(quiz.dataset.learningStage && {
+                        learningStage: quiz.dataset.learningStage,
+                    }),
+                });
+
+                form.reset();
+                form.hidden = true;
+                if (toggle) toggle.hidden = true;
+                if (saved) saved.hidden = false;
+            });
+        });
+</script>
