@@ -37,6 +37,34 @@ export interface QuestionReviewState {
     updatedAt: string;
 }
 
+const validFeedbackReasons = new Set<string>(QUESTION_FEEDBACK_REASONS);
+
+function normalizeQuestionFeedback(
+    feedback: unknown[],
+): QuestionFeedback[] {
+    return feedback
+        .filter(
+            (entry): entry is QuestionFeedback =>
+                Boolean(entry) &&
+                typeof entry === "object" &&
+                typeof (entry as QuestionFeedback).questionId === "string",
+        )
+        .map((entry) => {
+            const rawReason = (entry as { reason?: unknown }).reason;
+            const reason =
+                typeof rawReason === "string" &&
+                validFeedbackReasons.has(rawReason)
+                    ? (rawReason as QuestionFeedbackReason)
+                    : undefined;
+
+            return {
+                ...entry,
+                ...(reason ? { reason } : {}),
+                ...(!reason && "reason" in entry ? { reason: undefined } : {}),
+            };
+        });
+}
+
 function deduplicateQuestionFeedback(
     feedback: QuestionFeedback[],
 ): QuestionFeedback[] {
@@ -70,15 +98,14 @@ export function readQuestionFeedback(): QuestionFeedback[] {
         const parsed: unknown = JSON.parse(stored);
         if (!Array.isArray(parsed)) return [];
 
-        const deduplicated = deduplicateQuestionFeedback(
-            parsed as QuestionFeedback[],
-        );
+        const normalized = normalizeQuestionFeedback(parsed);
+        const deduplicated = deduplicateQuestionFeedback(normalized);
+        const serialized = JSON.stringify(deduplicated);
 
-        if (deduplicated.length !== parsed.length) {
-            localStorage.setItem(
-                QUESTION_FEEDBACK_STORAGE_KEY,
-                JSON.stringify(deduplicated),
-            );
+        // Clean up duplicate entries and legacy/unknown reason values so old
+        // prototype data cannot leak "undefined" into review analytics.
+        if (serialized !== stored) {
+            localStorage.setItem(QUESTION_FEEDBACK_STORAGE_KEY, serialized);
         }
 
         return deduplicated;
