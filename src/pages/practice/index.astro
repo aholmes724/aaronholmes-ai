@@ -261,8 +261,8 @@ const practiceQuestions = allQuestions;
     };
 
     // Filter questions by mode using shared mode rules.
-    // Weak mode rotates across ranked target concepts and prefers questions
-    // that have not appeared in the learner's 10 most recent attempts.
+    // Weak mode prioritizes distinct target concepts before repeating any one
+    // concept, while preferring questions that were not recently answered.
     let filteredByMode: HTMLElement[] = [];
 
     if (mode === "weak") {
@@ -316,24 +316,37 @@ const practiceQuestions = allQuestions;
             buckets.set(concept, [...fresh, ...recent]);
         });
 
-        const ordered: HTMLElement[] = [];
-        let addedQuestion = true;
+        const targetConceptNames = targetConcepts
+            .map((target) => target.concept)
+            .filter((concept) => (buckets.get(concept)?.length ?? 0) > 0);
 
-        while (addedQuestion) {
-            addedQuestion = false;
+        const desiredCount =
+            selectedLength === "all"
+                ? targetedCandidates.length
+                : Number(selectedLength);
 
-            for (const target of targetConcepts) {
-                const bucket = buckets.get(target.concept);
-                const next = bucket?.shift();
+        const selected: HTMLElement[] = [];
+        let pass = 0;
 
-                if (next) {
-                    ordered.push(next);
-                    addedQuestion = true;
+        while (selected.length < desiredCount) {
+            let addedThisPass = false;
+
+            for (const concept of targetConceptNames) {
+                if (selected.length >= desiredCount) break;
+
+                const candidate = buckets.get(concept)?.[pass];
+
+                if (candidate) {
+                    selected.push(candidate);
+                    addedThisPass = true;
                 }
             }
+
+            if (!addedThisPass) break;
+            pass += 1;
         }
 
-        filteredByMode = ordered;
+        filteredByMode = selected;
     } else {
         filteredByMode = sessionCandidates.filter((question) => {
             const quiz = getQuiz(question);
