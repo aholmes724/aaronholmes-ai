@@ -302,6 +302,7 @@ const practiceQuestions = allQuestions;
             .filter(Boolean);
         const difficulty = quiz?.dataset.difficulty;
         const learningStage = quiz?.dataset.learningStage;
+        const masteryConcept = quiz?.dataset.masteryConcept;
 
         savePracticeAttempt({
             questionId,
@@ -311,6 +312,7 @@ const practiceQuestions = allQuestions;
             sessionId,
             ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
             ...(concepts?.length && { concepts }),
+            ...(masteryConcept && { masteryConcept }),
             ...(difficulty && { difficulty: difficulty as "beginner" | "intermediate" | "advanced" }),
             ...(learningStage && {
                 learningStage: learningStage as

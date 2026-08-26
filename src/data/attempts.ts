@@ -10,6 +10,7 @@ export interface PracticeAttempt {
     difficulty?: Question["difficulty"];
     learningStage?: Question["learningStage"];
     sessionId?: string;
+    masteryConcept?: string;
 }
 
 export interface PracticeSessionSummary {
@@ -151,7 +152,9 @@ export function getConceptMastery(
     >();
 
     attempts.forEach((attempt) => {
-        const concepts = attempt.concepts ?? [];
+        const concepts = attempt.masteryConcept
+            ? [attempt.masteryConcept]
+            : attempt.concepts ?? [];
 
         concepts.forEach((concept) => {
             const existing = conceptMap.get(concept) ?? {

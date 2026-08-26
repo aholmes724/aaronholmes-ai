@@ -19,3 +19,4 @@ export interface Question {
     sourceId?: string;
     sourceReference?: string;
     shuffleAnswers?: boolean;
+    masteryConcept?: string;
