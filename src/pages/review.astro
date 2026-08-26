@@ -1,0 +1,231 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Question Review | Aaron Holmes">
+    <main class="container">
+        <div class="practice-links">
+            <a href="/progress">← Back to Progress</a>
+            <a href="/practice">Practice</a>
+        </div>
+
+        <h1>Question review</h1>
+        <p>
+            Review learner flags, spot recurring quality problems, and turn them
+            into guidance for future question generation.
+        </p>
+
+        <section class="progress-summary" aria-labelledby="feedback-summary-heading">
+            <h2 id="feedback-summary-heading">Feedback summary</h2>
+            <dl id="feedback-summary" class="progress-stats"></dl>
+        </section>
+
+        <section aria-labelledby="guidance-heading">
+            <h2 id="guidance-heading">Generation guidance</h2>
+            <p>
+                This is a deterministic summary of the feedback collected on this
+                browser. It is intended to become input to future question-generation
+                and review prompts.
+            </p>
+            <div id="generation-guidance" class="progress-summary">
+                <p>No question feedback yet.</p>
+            </div>
+        </section>
+
+        <section aria-labelledby="queue-heading">
+            <h2 id="queue-heading">Review queue</h2>
+            <div id="review-queue" class="progress-list">
+                <p>No flagged questions yet.</p>
+            </div>
+        </section>
+    </main>
+</Layout>
+
+<script>
+    import { allQuestions } from "../data/questions";
+    import {
+        QUESTION_FEEDBACK_REASONS,
+        getFeedbackReasonLabel,
+        readQuestionFeedback,
+        readQuestionReviewStates,
+        setQuestionReviewStatus,
+        type QuestionFeedbackReason,
+        type QuestionReviewStatus,
+    } from "../data/question-feedback";
+
+    const questionById = new Map(
+        allQuestions.map((question) => [question.id, question]),
+    );
+
+    const reviewStatusLabels: Record<QuestionReviewStatus, string> = {
+        open: "Open",
+        "needs-rewrite": "Needs rewrite",
+        reviewed: "Reviewed",
+        retired: "Retired",
+    };
+
+    const guidanceByReason: Record<QuestionFeedbackReason, string> = {
+        "wording-gives-away-answer":
+            "Avoid distractors whose wording exposes them as wrong. Use absolute qualifiers such as always, never, only, every, and guaranteed sparingly and only when technically necessary.",
+        "distractors-unrealistic":
+            "Prefer plausible distractors that reflect realistic misconceptions or near-miss reasoning an informed learner might actually choose.",
+        "answer-too-obvious":
+            "Make the learner distinguish between credible alternatives rather than identifying the single nuanced or professionally worded answer.",
+        "possibly-incorrect":
+            "Verify the keyed answer and explanation against the source before approval; do not use uncertain questions for mastery decisions until reviewed.",
+        "explanation-unclear":
+            "Write explanations that state why the correct answer fits and why the tempting alternatives do not, without merely repeating the answer text.",
+        other:
+            "Review free-text notes for additional recurring quality patterns before generating the next batch.",
+    };
+
+    const render = () => {
+        const feedback = readQuestionFeedback();
+        const reviewStates = new Map(
+            readQuestionReviewStates().map((state) => [
+                state.questionId,
+                state.status,
+            ]),
+        );
+
+        const reasonCounts = new Map<QuestionFeedbackReason, number>();
+        QUESTION_FEEDBACK_REASONS.forEach((reason) => reasonCounts.set(reason, 0));
+        feedback.forEach((item) => {
+            reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
+        });
+
+        const summary = document.querySelector<HTMLElement>("#feedback-summary");
+        if (summary) {
+            if (!feedback.length) {
+                summary.innerHTML = "<div><dt>Total flags</dt><dd>0</dd></div>";
+            } else {
+                const reasonEntries = Array.from(reasonCounts.entries())
+                    .filter(([, count]) => count > 0)
+                    .sort((first, second) => second[1] - first[1]);
+
+                summary.replaceChildren(
+                    ...[
+                        ["Total flags", feedback.length.toString()],
+                        ...reasonEntries.slice(0, 2).map(([reason, count]) => [
+                            getFeedbackReasonLabel(reason),
+                            count.toString(),
+                        ]),
+                    ].map(([labelText, valueText]) => {
+                        const wrapper = document.createElement("div");
+                        const label = document.createElement("dt");
+                        const value = document.createElement("dd");
+                        label.textContent = labelText;
+                        value.textContent = valueText;
+                        wrapper.append(label, value);
+                        return wrapper;
+                    }),
+                );
+            }
+        }
+
+        const guidance = document.querySelector<HTMLElement>("#generation-guidance");
+        if (guidance) {
+            const rankedReasons = Array.from(reasonCounts.entries())
+                .filter(([, count]) => count > 0)
+                .sort((first, second) => second[1] - first[1]);
+
+            if (!rankedReasons.length) {
+                guidance.innerHTML = "<p>No question feedback yet.</p>";
+            } else {
+                const heading = document.createElement("strong");
+                heading.textContent = "Current quality guidance";
+                const list = document.createElement("ul");
+
+                rankedReasons.slice(0, 4).forEach(([reason, count]) => {
+                    const item = document.createElement("li");
+                    item.textContent = `${guidanceByReason[reason]} (${count} flag${count === 1 ? "" : "s"})`;
+                    list.append(item);
+                });
+
+                guidance.replaceChildren(heading, list);
+            }
+        }
+
+        const groups = new Map<string, typeof feedback>();
+        feedback.forEach((item) => {
+            const items = groups.get(item.questionId) ?? [];
+            items.push(item);
+            groups.set(item.questionId, items);
+        });
+
+        const queue = document.querySelector<HTMLElement>("#review-queue");
+        if (!queue) return;
+
+        if (!groups.size) {
+            queue.innerHTML = "<p>No flagged questions yet.</p>";
+            return;
+        }
+
+        const cards = Array.from(groups.entries())
+            .sort(([, firstItems], [, secondItems]) => {
+                const firstTime = Math.max(
+                    ...firstItems.map((item) => new Date(item.createdAt).getTime()),
+                );
+                const secondTime = Math.max(
+                    ...secondItems.map((item) => new Date(item.createdAt).getTime()),
+                );
+                return secondTime - firstTime;
+            })
+            .map(([questionId, items]) => {
+                const question = questionById.get(questionId);
+                const card = document.createElement("article");
+                card.className = "progress-summary question-review-card";
+
+                const title = document.createElement("h3");
+                title.textContent = question?.prompt ?? questionId;
+
+                const meta = document.createElement("p");
+                meta.className = "question-review-meta";
+                meta.textContent = `${items.length} flag${items.length === 1 ? "" : "s"} · ${question?.topic ?? items[0]?.topic ?? "unknown topic"}`;
+
+                const reasons = document.createElement("ul");
+                items.forEach((item) => {
+                    const line = document.createElement("li");
+                    const note = item.note ? ` — ${item.note}` : "";
+                    line.textContent = `${getFeedbackReasonLabel(item.reason)}${note}`;
+                    reasons.append(line);
+                });
+
+                const controls = document.createElement("div");
+                controls.className = "progress-actions";
+
+                const label = document.createElement("label");
+                label.textContent = "Review status ";
+
+                const select = document.createElement("select");
+                select.className = "question-review-status";
+                const currentStatus = reviewStates.get(questionId) ?? "open";
+
+                (Object.keys(reviewStatusLabels) as QuestionReviewStatus[]).forEach(
+                    (status) => {
+                        const option = document.createElement("option");
+                        option.value = status;
+                        option.textContent = reviewStatusLabels[status];
+                        option.selected = status === currentStatus;
+                        select.append(option);
+                    },
+                );
+
+                select.addEventListener("change", () => {
+                    setQuestionReviewStatus(
+                        questionId,
+                        select.value as QuestionReviewStatus,
+                    );
+                });
+
+                label.append(select);
+                controls.append(label);
+                card.append(title, meta, reasons, controls);
+                return card;
+            });
+
+        queue.replaceChildren(...cards);
+    };
+
+    render();
+</script>
