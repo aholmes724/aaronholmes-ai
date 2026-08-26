@@ -32,50 +32,81 @@
 </div>
 
 <script>
-    import { saveQuestionFeedback, type QuestionFeedbackReason } from "../data/question-feedback";
+    import {
+        saveQuestionFeedback,
+        type QuestionFeedbackReason,
+    } from "../data/question-feedback";
+    import { syncQuestionFeedback } from "../data/shared-feedback";
 
-    document.querySelectorAll<HTMLElement>("[data-question-feedback]").forEach((container) => {
-        const quiz = container.closest<HTMLElement>(".quiz-question");
-        const toggle = container.querySelector<HTMLButtonElement>(".question-feedback-toggle");
-        const form = container.querySelector<HTMLFormElement>(".question-feedback-form");
-        const cancel = container.querySelector<HTMLButtonElement>(".question-feedback-cancel");
-        const saved = container.querySelector<HTMLElement>(".question-feedback-saved");
+    document
+        .querySelectorAll<HTMLElement>("[data-question-feedback]")
+        .forEach((container) => {
+            const quiz = container.closest<HTMLElement>(".quiz-question");
+            const toggle = container.querySelector<HTMLButtonElement>(
+                ".question-feedback-toggle",
+            );
+            const form = container.querySelector<HTMLFormElement>(
+                ".question-feedback-form",
+            );
+            const cancel = container.querySelector<HTMLButtonElement>(
+                ".question-feedback-cancel",
+            );
+            const saved = container.querySelector<HTMLElement>(
+                ".question-feedback-saved",
+            );
 
-        toggle?.addEventListener("click", () => {
-            if (!form) return;
-            form.hidden = !form.hidden;
-            if (!form.hidden) form.querySelector<HTMLSelectElement>("select")?.focus();
-        });
-
-        cancel?.addEventListener("click", () => {
-            if (form) form.hidden = true;
-            toggle?.focus();
-        });
-
-        form?.addEventListener("submit", (event) => {
-            event.preventDefault();
-            if (!quiz) return;
-
-            const data = new FormData(form);
-            const reasonValue = data.get("reason")?.toString().trim();
-            const note = data.get("note")?.toString().trim();
-
-            saveQuestionFeedback({
-                questionId: quiz.dataset.questionId ?? "unknown",
-                ...(reasonValue && { reason: reasonValue as QuestionFeedbackReason }),
-                ...(note && { note }),
-                ...(quiz.dataset.topic && { topic: quiz.dataset.topic }),
-                ...(quiz.dataset.masteryConcept && { masteryConcept: quiz.dataset.masteryConcept }),
-                ...(quiz.dataset.learningObjective && { learningObjective: quiz.dataset.learningObjective }),
-                ...(quiz.dataset.learningStage && { learningStage: quiz.dataset.learningStage }),
+            toggle?.addEventListener("click", () => {
+                if (!form) return;
+                form.hidden = !form.hidden;
+                if (!form.hidden) {
+                    form.querySelector<HTMLSelectElement>("select")?.focus();
+                }
             });
 
-            form.reset();
-            form.hidden = true;
-            if (toggle) toggle.hidden = true;
-            if (saved) saved.hidden = false;
+            cancel?.addEventListener("click", () => {
+                if (form) form.hidden = true;
+                toggle?.focus();
+            });
+
+            form?.addEventListener("submit", (event) => {
+                event.preventDefault();
+                if (!quiz) return;
+
+                const data = new FormData(form);
+                const reasonValue = data.get("reason")?.toString().trim();
+                const note = data.get("note")?.toString().trim();
+
+                const feedback = saveQuestionFeedback({
+                    questionId: quiz.dataset.questionId ?? "unknown",
+                    ...(reasonValue && {
+                        reason: reasonValue as QuestionFeedbackReason,
+                    }),
+                    ...(note && { note }),
+                    ...(quiz.dataset.topic && {
+                        topic: quiz.dataset.topic,
+                    }),
+                    ...(quiz.dataset.masteryConcept && {
+                        masteryConcept: quiz.dataset.masteryConcept,
+                    }),
+                    ...(quiz.dataset.learningObjective && {
+                        learningObjective: quiz.dataset.learningObjective,
+                    }),
+                    ...(quiz.dataset.learningStage && {
+                        learningStage: quiz.dataset.learningStage,
+                    }),
+                });
+
+                // Local save is the source of truth for immediate UX. Remote sync
+                // is best-effort and only activates when Supabase env vars exist.
+                // Free-text notes are intentionally not included in the shared store.
+                void syncQuestionFeedback(feedback);
+
+                form.reset();
+                form.hidden = true;
+                if (toggle) toggle.hidden = true;
+                if (saved) saved.hidden = false;
+            });
         });
-    });
 </script>
 
 <style>
