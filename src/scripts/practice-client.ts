@@ -9,6 +9,7 @@ import {
     getModeDescription,
     type QuestionMeta,
 } from "../data/practice-modes";
+import { readQuestionReviewStates } from "../data/question-feedback";
 
 const sessionId = crypto.randomUUID();
 const sessionStartedAt = new Date().toISOString();
@@ -32,8 +33,24 @@ const practiceDescription = document.getElementById("practice-description");
 const practiceEmptyState = document.getElementById("practice-empty-state");
 const answeredQuestions = new Set<string>();
 
-const sessionCandidates = Array.from(
+const allSessionCandidates = Array.from(
     document.querySelectorAll<HTMLElement>("[data-session-question]"),
+);
+
+const getQuiz = (question: HTMLElement) =>
+    question.querySelector<HTMLElement>(".quiz-question");
+
+const getQuestionId = (question: HTMLElement) =>
+    getQuiz(question)?.dataset.questionId ?? "";
+
+const retiredQuestionIds = new Set(
+    readQuestionReviewStates()
+        .filter((state) => state.status === "retired")
+        .map((state) => state.questionId),
+);
+
+const sessionCandidates = allSessionCandidates.filter(
+    (question) => !retiredQuestionIds.has(getQuestionId(question)),
 );
 
 const searchParams = new URLSearchParams(window.location.search);
@@ -82,12 +99,6 @@ const buildPracticeUrl = (
 if (newSession) {
     newSession.href = buildPracticeUrl(mode, topic, selectedLength);
 }
-
-const getQuiz = (question: HTMLElement) =>
-    question.querySelector<HTMLElement>(".quiz-question");
-
-const getQuestionId = (question: HTMLElement) =>
-    getQuiz(question)?.dataset.questionId ?? "";
 
 const getMasteryConcept = (question: HTMLElement) =>
     getQuiz(question)?.dataset.masteryConcept ?? "";
@@ -209,9 +220,6 @@ if (mode === "weak") {
         return candidates.splice(bestIndex, 1)[0];
     };
 
-    // First pass deliberately maximizes concept coverage. A five-question
-    // session should normally touch five target concepts when the bank allows
-    // it instead of becoming a mini-quiz on whichever concept ranks first.
     for (const concept of targetConceptNames) {
         if (selected.length >= desiredCount) break;
 
@@ -225,9 +233,6 @@ if (mode === "weak") {
         usedObjectives.add(getLearningObjective(candidate));
     }
 
-    // Only after each available target concept has had a turn do we allow a
-    // second question from the same concept. Repeated passes preserve target
-    // priority while keeping longer sessions balanced.
     while (selected.length < desiredCount) {
         let addedThisPass = false;
 
@@ -273,7 +278,7 @@ if (practiceEmptyState) {
     practiceEmptyState.hidden = sessionQuestions.length !== 0;
 }
 
-sessionCandidates.forEach((question) => {
+allSessionCandidates.forEach((question) => {
     question.hidden = sessionQuestions.indexOf(question) !== 0;
 });
 
