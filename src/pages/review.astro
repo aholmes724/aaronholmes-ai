@@ -10,10 +10,7 @@ import Layout from "../layouts/Layout.astro";
         </div>
 
         <h1>Question review</h1>
-        <p>
-            Review learner flags, spot recurring quality problems, and turn them
-            into guidance for future question generation.
-        </p>
+        <p>Review learner flags, spot recurring quality problems, and turn them into guidance for future question generation.</p>
 
         <section class="progress-summary" aria-labelledby="feedback-summary-heading">
             <h2 id="feedback-summary-heading">Feedback summary</h2>
@@ -22,21 +19,18 @@ import Layout from "../layouts/Layout.astro";
 
         <section aria-labelledby="guidance-heading">
             <h2 id="guidance-heading">Generation guidance</h2>
-            <p>
-                This is a deterministic summary of the feedback collected on this
-                browser. It is intended to become input to future question-generation
-                and review prompts.
-            </p>
-            <div id="generation-guidance" class="progress-summary">
-                <p>No question feedback yet.</p>
-            </div>
+            <p>This is a deterministic summary of the feedback collected on this browser. It is intended to become input to future question-generation and review prompts.</p>
+            <div id="generation-guidance" class="progress-summary"><p>No question feedback yet.</p></div>
+        </section>
+
+        <section aria-labelledby="rewrite-heading">
+            <h2 id="rewrite-heading">Needs rewrite</h2>
+            <div id="rewrite-queue" class="progress-list"><p>No questions waiting for rewrite.</p></div>
         </section>
 
         <section aria-labelledby="queue-heading">
-            <h2 id="queue-heading">Review queue</h2>
-            <div id="review-queue" class="progress-list">
-                <p>No flagged questions yet.</p>
-            </div>
+            <h2 id="queue-heading">Open review queue</h2>
+            <div id="review-queue" class="progress-list"><p>No open flagged questions.</p></div>
         </section>
     </main>
 </Layout>
@@ -49,13 +43,12 @@ import Layout from "../layouts/Layout.astro";
         readQuestionFeedback,
         readQuestionReviewStates,
         setQuestionReviewStatus,
+        type QuestionFeedback,
         type QuestionFeedbackReason,
         type QuestionReviewStatus,
     } from "../data/question-feedback";
 
-    const questionById = new Map(
-        allQuestions.map((question) => [question.id, question]),
-    );
+    const questionById = new Map(allQuestions.map((question) => [question.id, question]));
 
     const reviewStatusLabels: Record<QuestionReviewStatus, string> = {
         open: "Open",
@@ -65,36 +58,73 @@ import Layout from "../layouts/Layout.astro";
     };
 
     const guidanceByReason: Record<QuestionFeedbackReason, string> = {
-        "wording-gives-away-answer":
-            "Avoid distractors whose wording exposes them as wrong. Use absolute qualifiers such as always, never, only, every, and guaranteed sparingly and only when technically necessary.",
-        "distractors-unrealistic":
-            "Prefer plausible distractors that reflect realistic misconceptions or near-miss reasoning an informed learner might actually choose.",
-        "answer-too-obvious":
-            "Make the learner distinguish between credible alternatives rather than identifying the single nuanced or professionally worded answer.",
-        "possibly-incorrect":
-            "Verify the keyed answer and explanation against the source before approval; do not use uncertain questions for mastery decisions until reviewed.",
-        "explanation-unclear":
-            "Write explanations that state why the correct answer fits and why the tempting alternatives do not, without merely repeating the answer text.",
-        other:
-            "Review free-text notes for additional recurring quality patterns before generating the next batch.",
+        "wording-gives-away-answer": "Avoid distractors whose wording exposes them as wrong. Use absolute qualifiers such as always, never, only, every, and guaranteed sparingly and only when technically necessary.",
+        "distractors-unrealistic": "Prefer plausible distractors that reflect realistic misconceptions or near-miss reasoning an informed learner might actually choose.",
+        "answer-too-obvious": "Make the learner distinguish between credible alternatives rather than identifying the single nuanced or professionally worded answer.",
+        "possibly-incorrect": "Verify the keyed answer and explanation against the source before approval; do not use uncertain questions for mastery decisions until reviewed.",
+        "explanation-unclear": "Write explanations that state why the correct answer fits and why the tempting alternatives do not, without merely repeating the answer text.",
+        other: "Review free-text notes for additional recurring quality patterns before generating the next batch.",
+    };
+
+    const createReviewCard = (
+        questionId: string,
+        items: QuestionFeedback[],
+        currentStatus: QuestionReviewStatus,
+        rerender: () => void,
+    ) => {
+        const question = questionById.get(questionId);
+        const card = document.createElement("article");
+        card.className = "progress-summary question-review-card";
+
+        const title = document.createElement("h3");
+        title.textContent = question?.prompt ?? questionId;
+
+        const meta = document.createElement("p");
+        meta.className = "question-review-meta";
+        meta.textContent = `${items.length} flag${items.length === 1 ? "" : "s"} · ${question?.topic ?? items[0]?.topic ?? "unknown topic"}`;
+
+        const reasons = document.createElement("ul");
+        items.forEach((item) => {
+            const line = document.createElement("li");
+            const note = item.note ? ` — ${item.note}` : "";
+            line.textContent = item.reason ? `${getFeedbackReasonLabel(item.reason)}${note}` : `Bare flag${note}`;
+            reasons.append(line);
+        });
+
+        const controls = document.createElement("div");
+        controls.className = "progress-actions";
+        const label = document.createElement("label");
+        label.textContent = "Review status ";
+        const select = document.createElement("select");
+        select.className = "question-review-status";
+
+        (Object.keys(reviewStatusLabels) as QuestionReviewStatus[]).forEach((status) => {
+            const option = document.createElement("option");
+            option.value = status;
+            option.textContent = reviewStatusLabels[status];
+            option.selected = status === currentStatus;
+            select.append(option);
+        });
+
+        select.addEventListener("change", () => {
+            setQuestionReviewStatus(questionId, select.value as QuestionReviewStatus);
+            rerender();
+        });
+
+        label.append(select);
+        controls.append(label);
+        card.append(title, meta, reasons, controls);
+        return card;
     };
 
     const render = () => {
         const feedback = readQuestionFeedback();
-        const reviewStates = new Map(
-            readQuestionReviewStates().map((state) => [
-                state.questionId,
-                state.status,
-            ]),
-        );
-
+        const reviewStates = new Map(readQuestionReviewStates().map((state) => [state.questionId, state.status]));
         const reasonCounts = new Map<QuestionFeedbackReason, number>();
         QUESTION_FEEDBACK_REASONS.forEach((reason) => reasonCounts.set(reason, 0));
         feedback.forEach((item) => {
-            if (!item.reason) return;
-            reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
+            if (item.reason) reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
         });
-
         const bareFlagCount = feedback.filter((item) => !item.reason).length;
 
         const summary = document.querySelector<HTMLElement>("#feedback-summary");
@@ -102,45 +132,32 @@ import Layout from "../layouts/Layout.astro";
             if (!feedback.length) {
                 summary.innerHTML = "<div><dt>Total flags</dt><dd>0</dd></div>";
             } else {
-                const reasonEntries = Array.from(reasonCounts.entries())
-                    .filter(([, count]) => count > 0)
-                    .sort((first, second) => second[1] - first[1]);
-
-                const summaryEntries: string[][] = [
+                const uniqueQuestionIds = new Set(feedback.map((item) => item.questionId));
+                const needsRewriteCount = [...uniqueQuestionIds].filter((id) => reviewStates.get(id) === "needs-rewrite").length;
+                const retiredCount = [...uniqueQuestionIds].filter((id) => reviewStates.get(id) === "retired").length;
+                const reasonEntries = Array.from(reasonCounts.entries()).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+                const entries: string[][] = [
                     ["Total flags", feedback.length.toString()],
+                    ["Needs rewrite", needsRewriteCount.toString()],
+                    ["Retired", retiredCount.toString()],
                 ];
-
-                if (bareFlagCount > 0) {
-                    summaryEntries.push(["Bare flags", bareFlagCount.toString()]);
-                }
-
-                summaryEntries.push(
-                    ...reasonEntries.slice(0, 2).map(([reason, count]) => [
-                        getFeedbackReasonLabel(reason),
-                        count.toString(),
-                    ]),
-                );
-
-                summary.replaceChildren(
-                    ...summaryEntries.map(([labelText, valueText]) => {
-                        const wrapper = document.createElement("div");
-                        const label = document.createElement("dt");
-                        const value = document.createElement("dd");
-                        label.textContent = labelText;
-                        value.textContent = valueText;
-                        wrapper.append(label, value);
-                        return wrapper;
-                    }),
-                );
+                if (bareFlagCount > 0) entries.push(["Bare flags", bareFlagCount.toString()]);
+                entries.push(...reasonEntries.slice(0, 2).map(([reason, count]) => [getFeedbackReasonLabel(reason), count.toString()]));
+                summary.replaceChildren(...entries.map(([labelText, valueText]) => {
+                    const wrapper = document.createElement("div");
+                    const label = document.createElement("dt");
+                    const value = document.createElement("dd");
+                    label.textContent = labelText;
+                    value.textContent = valueText;
+                    wrapper.append(label, value);
+                    return wrapper;
+                }));
             }
         }
 
         const guidance = document.querySelector<HTMLElement>("#generation-guidance");
         if (guidance) {
-            const rankedReasons = Array.from(reasonCounts.entries())
-                .filter(([, count]) => count > 0)
-                .sort((first, second) => second[1] - first[1]);
-
+            const rankedReasons = Array.from(reasonCounts.entries()).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
             if (!rankedReasons.length) {
                 guidance.innerHTML = bareFlagCount
                     ? `<p>${bareFlagCount} bare flag${bareFlagCount === 1 ? "" : "s"} indicate question${bareFlagCount === 1 ? "" : "s"} that need review, but there is not enough categorized feedback yet to infer a generation rule.</p>`
@@ -149,98 +166,36 @@ import Layout from "../layouts/Layout.astro";
                 const heading = document.createElement("strong");
                 heading.textContent = "Current quality guidance";
                 const list = document.createElement("ul");
-
                 rankedReasons.slice(0, 4).forEach(([reason, count]) => {
                     const item = document.createElement("li");
                     item.textContent = `${guidanceByReason[reason]} (${count} flag${count === 1 ? "" : "s"})`;
                     list.append(item);
                 });
-
                 guidance.replaceChildren(heading, list);
             }
         }
 
-        const groups = new Map<string, typeof feedback>();
+        const groups = new Map<string, QuestionFeedback[]>();
         feedback.forEach((item) => {
             const items = groups.get(item.questionId) ?? [];
             items.push(item);
             groups.set(item.questionId, items);
         });
+        const sortedGroups = Array.from(groups.entries()).sort(([, a], [, b]) =>
+            Math.max(...b.map((item) => new Date(item.createdAt).getTime())) - Math.max(...a.map((item) => new Date(item.createdAt).getTime()))
+        );
 
-        const queue = document.querySelector<HTMLElement>("#review-queue");
-        if (!queue) return;
+        const rewriteQueue = document.querySelector<HTMLElement>("#rewrite-queue");
+        const reviewQueue = document.querySelector<HTMLElement>("#review-queue");
+        const rewriteCards = sortedGroups.filter(([id]) => reviewStates.get(id) === "needs-rewrite").map(([id, items]) => createReviewCard(id, items, "needs-rewrite", render));
+        const openCards = sortedGroups.filter(([id]) => (reviewStates.get(id) ?? "open") === "open").map(([id, items]) => createReviewCard(id, items, "open", render));
 
-        if (!groups.size) {
-            queue.innerHTML = "<p>No flagged questions yet.</p>";
-            return;
+        if (rewriteQueue) {
+            rewriteCards.length ? rewriteQueue.replaceChildren(...rewriteCards) : rewriteQueue.innerHTML = "<p>No questions waiting for rewrite.</p>";
         }
-
-        const cards = Array.from(groups.entries())
-            .sort(([, firstItems], [, secondItems]) => {
-                const firstTime = Math.max(
-                    ...firstItems.map((item) => new Date(item.createdAt).getTime()),
-                );
-                const secondTime = Math.max(
-                    ...secondItems.map((item) => new Date(item.createdAt).getTime()),
-                );
-                return secondTime - firstTime;
-            })
-            .map(([questionId, items]) => {
-                const question = questionById.get(questionId);
-                const card = document.createElement("article");
-                card.className = "progress-summary question-review-card";
-
-                const title = document.createElement("h3");
-                title.textContent = question?.prompt ?? questionId;
-
-                const meta = document.createElement("p");
-                meta.className = "question-review-meta";
-                meta.textContent = `${items.length} flag${items.length === 1 ? "" : "s"} · ${question?.topic ?? items[0]?.topic ?? "unknown topic"}`;
-
-                const reasons = document.createElement("ul");
-                items.forEach((item) => {
-                    const line = document.createElement("li");
-                    const note = item.note ? ` — ${item.note}` : "";
-                    line.textContent = item.reason
-                        ? `${getFeedbackReasonLabel(item.reason)}${note}`
-                        : `Bare flag${note}`;
-                    reasons.append(line);
-                });
-
-                const controls = document.createElement("div");
-                controls.className = "progress-actions";
-
-                const label = document.createElement("label");
-                label.textContent = "Review status ";
-
-                const select = document.createElement("select");
-                select.className = "question-review-status";
-                const currentStatus = reviewStates.get(questionId) ?? "open";
-
-                (Object.keys(reviewStatusLabels) as QuestionReviewStatus[]).forEach(
-                    (status) => {
-                        const option = document.createElement("option");
-                        option.value = status;
-                        option.textContent = reviewStatusLabels[status];
-                        option.selected = status === currentStatus;
-                        select.append(option);
-                    },
-                );
-
-                select.addEventListener("change", () => {
-                    setQuestionReviewStatus(
-                        questionId,
-                        select.value as QuestionReviewStatus,
-                    );
-                });
-
-                label.append(select);
-                controls.append(label);
-                card.append(title, meta, reasons, controls);
-                return card;
-            });
-
-        queue.replaceChildren(...cards);
+        if (reviewQueue) {
+            openCards.length ? reviewQueue.replaceChildren(...openCards) : reviewQueue.innerHTML = "<p>No open flagged questions.</p>";
+        }
     };
 
     render();
