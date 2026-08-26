@@ -1,4 +1,5 @@
 export const QUESTION_FEEDBACK_STORAGE_KEY = "aaronholmes.question-feedback";
+export const QUESTION_REVIEW_STORAGE_KEY = "aaronholmes.question-review-state";
 
 export const QUESTION_FEEDBACK_REASONS = [
     "wording-gives-away-answer",
@@ -12,18 +13,28 @@ export const QUESTION_FEEDBACK_REASONS = [
 export type QuestionFeedbackReason =
     (typeof QUESTION_FEEDBACK_REASONS)[number];
 
+export type QuestionReviewStatus =
+    | "open"
+    | "needs-rewrite"
+    | "reviewed"
+    | "retired";
+
 export interface QuestionFeedback {
     id: string;
     questionId: string;
     reason: QuestionFeedbackReason;
     note?: string;
     createdAt: string;
-    // Keep these fields so future generation/review jobs can aggregate feedback
-    // without needing to reconstruct the question context from browser history.
     topic?: string;
     masteryConcept?: string;
     learningObjective?: string;
     learningStage?: string;
+}
+
+export interface QuestionReviewState {
+    questionId: string;
+    status: QuestionReviewStatus;
+    updatedAt: string;
 }
 
 export function readQuestionFeedback(): QuestionFeedback[] {
@@ -58,6 +69,60 @@ export function saveQuestionFeedback(
     }
 
     return saved;
+}
+
+export function readQuestionReviewStates(): QuestionReviewState[] {
+    try {
+        const stored = localStorage.getItem(QUESTION_REVIEW_STORAGE_KEY);
+        if (!stored) return [];
+        const parsed: unknown = JSON.parse(stored);
+        return Array.isArray(parsed) ? (parsed as QuestionReviewState[]) : [];
+    } catch {
+        return [];
+    }
+}
+
+export function getQuestionReviewStatus(
+    questionId: string,
+): QuestionReviewStatus {
+    return (
+        readQuestionReviewStates().find(
+            (state) => state.questionId === questionId,
+        )?.status ?? "open"
+    );
+}
+
+export function setQuestionReviewStatus(
+    questionId: string,
+    status: QuestionReviewStatus,
+): QuestionReviewState {
+    const updated: QuestionReviewState = {
+        questionId,
+        status,
+        updatedAt: new Date().toISOString(),
+    };
+
+    try {
+        const states = readQuestionReviewStates();
+        const existingIndex = states.findIndex(
+            (state) => state.questionId === questionId,
+        );
+
+        if (existingIndex >= 0) {
+            states[existingIndex] = updated;
+        } else {
+            states.push(updated);
+        }
+
+        localStorage.setItem(
+            QUESTION_REVIEW_STORAGE_KEY,
+            JSON.stringify(states),
+        );
+    } catch {
+        // Review controls should remain non-blocking if storage is unavailable.
+    }
+
+    return updated;
 }
 
 export function getFeedbackReasonLabel(
