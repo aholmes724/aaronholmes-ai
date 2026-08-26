@@ -5,20 +5,24 @@ import Layout from "../layouts/Layout.astro";
 <Layout title="Progress | Aaron Holmes">
     <main class="container">
         <a href="/learn">← Back to Learn</a>
+
         <h1>Progress</h1>
         <p>Practice history from this browser.</p>
 
         <section class="progress-summary" aria-labelledby="summary-heading">
             <h2 id="summary-heading">Summary</h2>
+
             <dl class="progress-stats">
                 <div>
                     <dt>Total attempts</dt>
                     <dd id="total-attempts">0</dd>
                 </div>
+
                 <div>
                     <dt>Total correct</dt>
                     <dd id="total-correct">0</dd>
                 </div>
+
                 <div>
                     <dt>Overall accuracy</dt>
                     <dd id="overall-accuracy">0%</dd>
@@ -26,8 +30,68 @@ import Layout from "../layouts/Layout.astro";
             </dl>
         </section>
 
+        <section
+            class="progress-summary"
+            aria-labelledby="mastery-summary-heading"
+        >
+            <h2 id="mastery-summary-heading">Concept mastery</h2>
+
+            <dl class="progress-stats mastery-stats">
+                <div>
+                    <dt>Weak</dt>
+                    <dd id="weak-count">0</dd>
+                </div>
+
+                <div>
+                    <dt>Developing</dt>
+                    <dd id="developing-count">0</dd>
+                </div>
+
+                <div>
+                    <dt>Limited data</dt>
+                    <dd id="learning-count">0</dd>
+                </div>
+
+                <div>
+                    <dt>Strong</dt>
+                    <dd id="strong-count">0</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section aria-labelledby="focus-heading">
+            <h2 id="focus-heading">Focus next</h2>
+
+            <p>
+                Concepts that currently deserve the most attention based on your
+                practice history.
+            </p>
+
+            <div id="focus-concepts" class="progress-list">
+                <p>Complete more practice to identify focus areas.</p>
+            </div>
+
+            <div id="weak-practice-action" class="progress-actions" hidden>
+                <a class="new-session-button" href="/practice?mode=weak">
+                    Practice weak concepts
+                </a>
+            </div>
+        </section>
+
+        <details class="concept-details">
+            <summary class="concept-summary">
+                <span>View all concept mastery</span>
+                <span id="concept-count"></span>
+            </summary>
+
+            <div id="concept-progress" class="progress-list">
+                <p>No concept data yet.</p>
+            </div>
+        </details>
+
         <section aria-labelledby="sessions-heading">
             <h2 id="sessions-heading">Recent sessions</h2>
+
             <div id="session-history" class="progress-list">
                 <p>No completed sessions yet.</p>
             </div>
@@ -35,20 +99,15 @@ import Layout from "../layouts/Layout.astro";
 
         <section aria-labelledby="topic-heading">
             <h2 id="topic-heading">Accuracy by topic</h2>
+
             <div id="topic-progress" class="progress-list">
                 <p>No practice attempts yet.</p>
             </div>
         </section>
 
-        <section aria-labelledby="concept-heading">
-            <h2 id="concept-heading">Accuracy by concept</h2>
-            <div id="concept-progress" class="progress-list">
-                <p>No concept data yet.</p>
-            </div>
-        </section>
-
         <div class="progress-actions">
-            <a class="new-session-button" href="/practice">Practice again</a>
+            <a class="new-session-button" href="/practice"> Practice again </a>
+
             <button
                 id="reset-progress"
                 class="reset-progress-button"
@@ -65,10 +124,12 @@ import Layout from "../layouts/Layout.astro";
             aria-labelledby="reset-heading"
         >
             <h2 id="reset-heading">Reset all progress?</h2>
+
             <p>
                 This will delete all saved Practice attempt history on this
                 device. This cannot be undone.
             </p>
+
             <div class="progress-actions">
                 <button
                     id="confirm-reset"
@@ -77,6 +138,7 @@ import Layout from "../layouts/Layout.astro";
                 >
                     Confirm reset
                 </button>
+
                 <button
                     id="cancel-reset"
                     class="secondary-button"
@@ -95,21 +157,133 @@ import Layout from "../layouts/Layout.astro";
         getConceptMastery,
         readPracticeAttempts,
         readSessionSummaries,
+        type ConceptMasterySummary,
+        type ConceptMasteryStatus,
     } from "../data/attempts";
+
+    import { PRACTICE_MODES } from "../data/practice-modes";
+
+    const STATUS_ORDER: Record<ConceptMasteryStatus, number> = {
+        weak: 0,
+        developing: 1,
+        learning: 2,
+        strong: 3,
+    };
+
+    const STATUS_LABELS: Record<ConceptMasteryStatus, string> = {
+        weak: "Weak",
+        developing: "Developing",
+        learning: "Limited data",
+        strong: "Strong",
+    };
 
     const setText = (id: string, value: string) => {
         const element = document.querySelector<HTMLElement>(`#${id}`);
-        if (element) element.textContent = value;
+
+        if (element) {
+            element.textContent = value;
+        }
+    };
+
+    const formatConceptName = (concept: string) => {
+        const specialNames: Record<string, string> = {
+            "api-fundamentals": "API Fundamentals",
+            "api-keys": "API Keys",
+            "oauth-2": "OAuth 2",
+            jwt: "JWT",
+            json: "JSON",
+            mcp: "MCP",
+            "ci-cd": "CI/CD",
+            "http-methods": "HTTP Methods",
+            "null-undefined": "Null / Undefined",
+        };
+
+        if (specialNames[concept]) {
+            return specialNames[concept];
+        }
+
+        return concept
+            .split("-")
+            .map((word) =>
+                word.length ? word[0].toUpperCase() + word.slice(1) : word,
+            )
+            .join(" ");
+    };
+
+    const getFocusScore = (concept: ConceptMasterySummary) => {
+        const statusWeight: Record<ConceptMasteryStatus, number> = {
+            weak: 4,
+            developing: 3,
+            learning: 1,
+            strong: 0,
+        };
+
+        const evidenceWeight = Math.min(concept.attempts, 10) / 10;
+
+        const errorWeight = 1 - concept.accuracy;
+
+        return (
+            statusWeight[concept.status] * 10 + errorWeight * 5 + evidenceWeight
+        );
+    };
+
+    const sortMastery = (mastery: ConceptMasterySummary[]) => {
+        return [...mastery].sort((first, second) => {
+            const statusDifference =
+                STATUS_ORDER[first.status] - STATUS_ORDER[second.status];
+
+            if (statusDifference !== 0) {
+                return statusDifference;
+            }
+
+            if (first.accuracy !== second.accuracy) {
+                return first.accuracy - second.accuracy;
+            }
+
+            if (first.attempts !== second.attempts) {
+                return second.attempts - first.attempts;
+            }
+
+            return first.concept.localeCompare(second.concept);
+        });
+    };
+
+    const createMasteryItem = (concept: ConceptMasterySummary) => {
+        const item = document.createElement("div");
+        item.className = "progress-item";
+        item.dataset.status = concept.status;
+
+        const label = document.createElement("strong");
+        label.textContent = formatConceptName(concept.concept);
+
+        const score = document.createElement("span");
+
+        const percentage = Math.round(concept.accuracy * 100);
+
+        score.textContent =
+            `${concept.correct}/${concept.attempts} ` +
+            `(${percentage}%) · ${STATUS_LABELS[concept.status]}`;
+
+        item.append(label, score);
+
+        return item;
     };
 
     const renderBreakdown = (
         containerId: string,
-        groups: Map<string, { attempts: number; correct: number }>,
+        groups: Map<
+            string,
+            {
+                attempts: number;
+                correct: number;
+            }
+        >,
         emptyMessage: string,
     ) => {
         const container = document.querySelector<HTMLElement>(
             `#${containerId}`,
         );
+
         if (!container) return;
 
         if (!groups.size) {
@@ -122,15 +296,25 @@ import Layout from "../layouts/Layout.astro";
                 .sort(([first], [second]) => first.localeCompare(second))
                 .map(([name, result]) => {
                     const item = document.createElement("div");
+
                     item.className = "progress-item";
+
                     const percentage = Math.round(
                         (result.correct / result.attempts) * 100,
                     );
+
                     const label = document.createElement("strong");
-                    label.textContent = name;
+
+                    label.textContent = formatConceptName(name);
+
                     const score = document.createElement("span");
-                    score.textContent = `${result.correct}/${result.attempts} (${percentage}%)`;
+
+                    score.textContent =
+                        `${result.correct}/${result.attempts} ` +
+                        `(${percentage}%)`;
+
                     item.append(label, score);
+
                     return item;
                 }),
         );
@@ -140,41 +324,88 @@ import Layout from "../layouts/Layout.astro";
         const container =
             document.querySelector<HTMLElement>("#concept-progress");
 
-        if (!container) return;
+        const focusContainer =
+            document.querySelector<HTMLElement>("#focus-concepts");
 
-        const mastery = getConceptMastery();
+        const weakPracticeAction = document.querySelector<HTMLElement>(
+            "#weak-practice-action",
+        );
+
+        const mastery = sortMastery(getConceptMastery());
+
+        setText("concept-count", mastery.length ? `(${mastery.length})` : "");
+
+        const statusCounts: Record<ConceptMasteryStatus, number> = {
+            weak: 0,
+            developing: 0,
+            learning: 0,
+            strong: 0,
+        };
+
+        mastery.forEach((concept) => {
+            statusCounts[concept.status] += 1;
+        });
+
+        setText("weak-count", statusCounts.weak.toString());
+
+        setText("developing-count", statusCounts.developing.toString());
+
+        setText("learning-count", statusCounts.learning.toString());
+
+        setText("strong-count", statusCounts.strong.toString());
 
         if (!mastery.length) {
-            container.innerHTML = "<p>No concept data yet.</p>";
+            if (container) {
+                container.innerHTML = "<p>No concept data yet.</p>";
+            }
+
+            if (focusContainer) {
+                focusContainer.innerHTML =
+                    "<p>Complete more practice to identify focus areas.</p>";
+            }
+
+            if (weakPracticeAction) {
+                weakPracticeAction.hidden = true;
+            }
+
             return;
         }
 
-        container.replaceChildren(
-            ...mastery.map((concept) => {
-                const item = document.createElement("div");
-                item.className = "progress-item";
+        if (container) {
+            container.replaceChildren(...mastery.map(createMasteryItem));
+        }
 
-                const label = document.createElement("strong");
-                label.textContent = concept.concept;
+        const focusCandidates = [...mastery]
+            .filter(
+                (concept) =>
+                    concept.status !== "strong" &&
+                    concept.status !== "learning",
+            )
+            .sort(
+                (first, second) => getFocusScore(second) - getFocusScore(first),
+            )
+            .slice(0, 5);
 
-                const score = document.createElement("span");
+        if (focusContainer) {
+            if (!focusCandidates.length) {
+                focusContainer.innerHTML =
+                    "<p>No weak or developing concepts right now. Keep practicing to reinforce what you know.</p>";
+            } else {
+                focusContainer.replaceChildren(
+                    ...focusCandidates.map(createMasteryItem),
+                );
+            }
+        }
 
-                const percentage = Math.round(concept.accuracy * 100);
-
-                score.textContent =
-                    `${concept.correct}/${concept.attempts} ` +
-                    `(${percentage}%) · ${concept.status}`;
-
-                item.append(label, score);
-
-                return item;
-            }),
-        );
+        if (weakPracticeAction) {
+            weakPracticeAction.hidden = statusCounts.weak === 0;
+        }
     };
 
     const renderSessionHistory = () => {
         const container =
             document.querySelector<HTMLElement>("#session-history");
+
         if (!container) return;
 
         const sessions = [...readSessionSummaries()].sort(
@@ -191,24 +422,33 @@ import Layout from "../layouts/Layout.astro";
         container.replaceChildren(
             ...sessions.map((session) => {
                 const item = document.createElement("div");
+
                 item.className = "progress-item";
 
                 const label = document.createElement("strong");
+
                 label.textContent =
                     PRACTICE_MODES[session.mode]?.label ?? session.mode;
 
                 const score = document.createElement("span");
+
                 const percentage = session.answeredCount
                     ? Math.round(
                           (session.correctCount / session.answeredCount) * 100,
                       )
                     : 0;
+
                 const completedAt = new Date(
                     session.completedAt,
                 ).toLocaleString();
-                score.textContent = `${session.correctCount}/${session.answeredCount} (${percentage}%) · ${completedAt}`;
+
+                score.textContent =
+                    `${session.correctCount}/` +
+                    `${session.answeredCount} ` +
+                    `(${percentage}%) · ${completedAt}`;
 
                 item.append(label, score);
+
                 return item;
             }),
         );
@@ -216,63 +456,91 @@ import Layout from "../layouts/Layout.astro";
 
     const renderProgress = () => {
         const attempts = readPracticeAttempts();
+
         const correctAttempts = attempts.filter(
             (attempt) => attempt.correct,
         ).length;
+
         const accuracy = attempts.length
             ? Math.round((correctAttempts / attempts.length) * 100)
             : 0;
 
         setText("total-attempts", attempts.length.toString());
+
         setText("total-correct", correctAttempts.toString());
+
         setText("overall-accuracy", `${accuracy}%`);
 
-        const topics = new Map<string, { attempts: number; correct: number }>();
-        
+        const topics = new Map<
+            string,
+            {
+                attempts: number;
+                correct: number;
+            }
+        >();
 
         attempts.forEach((attempt) => {
-            if (attempt.topic) {
-                const result = topics.get(attempt.topic) ?? {
-                    attempts: 0,
-                    correct: 0,
-                };
-                result.attempts += 1;
-                if (attempt.correct) result.correct += 1;
-                topics.set(attempt.topic, result);
+            if (!attempt.topic) return;
+
+            const result = topics.get(attempt.topic) ?? {
+                attempts: 0,
+                correct: 0,
+            };
+
+            result.attempts += 1;
+
+            if (attempt.correct) {
+                result.correct += 1;
             }
 
-            
+            topics.set(attempt.topic, result);
         });
 
-        renderBreakdown("topic-progress", topics, "No topic data yet.");
         renderConceptMastery();
+
         renderSessionHistory();
+
+        renderBreakdown("topic-progress", topics, "No topic data yet.");
     };
 
     const resetProgress =
         document.querySelector<HTMLButtonElement>("#reset-progress");
+
     const resetConfirmation = document.querySelector<HTMLElement>(
         "#reset-confirmation",
     );
+
     const confirmReset =
         document.querySelector<HTMLButtonElement>("#confirm-reset");
+
     const cancelReset =
         document.querySelector<HTMLButtonElement>("#cancel-reset");
 
     resetProgress?.addEventListener("click", () => {
-        if (resetConfirmation) resetConfirmation.hidden = false;
+        if (resetConfirmation) {
+            resetConfirmation.hidden = false;
+        }
+
         confirmReset?.focus();
     });
 
     cancelReset?.addEventListener("click", () => {
-        if (resetConfirmation) resetConfirmation.hidden = true;
+        if (resetConfirmation) {
+            resetConfirmation.hidden = true;
+        }
+
         resetProgress?.focus();
     });
 
     confirmReset?.addEventListener("click", () => {
         clearPracticeAttempts();
+
         renderProgress();
-        if (resetConfirmation) resetConfirmation.hidden = true;
+
+        if (resetConfirmation) {
+            resetConfirmation.hidden = true;
+        }
+
         resetProgress?.focus();
     });
 
