@@ -20,3 +20,5 @@ export interface Question {
     sourceReference?: string;
     shuffleAnswers?: boolean;
     masteryConcept?: string;
+    learningObjective?: string;
+}

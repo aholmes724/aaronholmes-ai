@@ -1,5 +1,6 @@
 ---
 import type { Question } from "../data/questions";
+import { getLearningObjective } from "../data/questions/learning-objectives";
 
 interface Props {
     question: Question;
@@ -7,6 +8,10 @@ interface Props {
 }
 
 const { question, mode = "lesson" } = Astro.props;
+const learningObjective = getLearningObjective(
+    question.id,
+    question.learningObjective,
+);
 ---
 
 <section
@@ -20,7 +25,7 @@ const { question, mode = "lesson" } = Astro.props;
     data-shuffle-answers={question.shuffleAnswers ?? true}
     data-explanation={question.explanation ?? ""}
     data-mastery-concept={question.masteryConcept ?? ""}
-    
+    data-learning-objective={learningObjective}
 >
     <h2>{question.prompt}</h2>
 
