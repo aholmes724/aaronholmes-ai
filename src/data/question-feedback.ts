@@ -37,12 +37,55 @@ export interface QuestionReviewState {
     updatedAt: string;
 }
 
+function deduplicateQuestionFeedback(
+    feedback: QuestionFeedback[],
+): QuestionFeedback[] {
+    const byQuestionAndReason = new Map<string, QuestionFeedback>();
+
+    feedback.forEach((entry) => {
+        const key = `${entry.questionId}::${entry.reason}`;
+        const existing = byQuestionAndReason.get(key);
+
+        if (!existing) {
+            byQuestionAndReason.set(key, entry);
+            return;
+        }
+
+        // Keep a useful note if one version has it, while treating repeated
+        // submissions of the same reason for the same question as one flag.
+        if (!existing.note && entry.note) {
+            byQuestionAndReason.set(key, {
+                ...existing,
+                note: entry.note,
+            });
+        }
+    });
+
+    return Array.from(byQuestionAndReason.values());
+}
+
 export function readQuestionFeedback(): QuestionFeedback[] {
     try {
         const stored = localStorage.getItem(QUESTION_FEEDBACK_STORAGE_KEY);
         if (!stored) return [];
+
         const parsed: unknown = JSON.parse(stored);
-        return Array.isArray(parsed) ? (parsed as QuestionFeedback[]) : [];
+        if (!Array.isArray(parsed)) return [];
+
+        const deduplicated = deduplicateQuestionFeedback(
+            parsed as QuestionFeedback[],
+        );
+
+        // Opportunistically clean up older duplicate entries already stored in
+        // the browser so review counts stay accurate after this update.
+        if (deduplicated.length !== parsed.length) {
+            localStorage.setItem(
+                QUESTION_FEEDBACK_STORAGE_KEY,
+                JSON.stringify(deduplicated),
+            );
+        }
+
+        return deduplicated;
     } catch {
         return [];
     }
@@ -59,6 +102,34 @@ export function saveQuestionFeedback(
 
     try {
         const existing = readQuestionFeedback();
+        const existingIndex = existing.findIndex(
+            (entry) =>
+                entry.questionId === feedback.questionId &&
+                entry.reason === feedback.reason,
+        );
+
+        if (existingIndex >= 0) {
+            const current = existing[existingIndex];
+            const updated: QuestionFeedback = {
+                ...current,
+                ...feedback,
+                id: current.id,
+                createdAt: current.createdAt,
+                ...(feedback.note
+                    ? { note: feedback.note }
+                    : current.note
+                      ? { note: current.note }
+                      : {}),
+            };
+
+            existing[existingIndex] = updated;
+            localStorage.setItem(
+                QUESTION_FEEDBACK_STORAGE_KEY,
+                JSON.stringify(existing),
+            );
+            return updated;
+        }
+
         existing.push(saved);
         localStorage.setItem(
             QUESTION_FEEDBACK_STORAGE_KEY,
