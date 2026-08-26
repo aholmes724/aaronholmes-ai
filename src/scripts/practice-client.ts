@@ -209,6 +209,25 @@ if (mode === "weak") {
         return candidates.splice(bestIndex, 1)[0];
     };
 
+    // First pass deliberately maximizes concept coverage. A five-question
+    // session should normally touch five target concepts when the bank allows
+    // it instead of becoming a mini-quiz on whichever concept ranks first.
+    for (const concept of targetConceptNames) {
+        if (selected.length >= desiredCount) break;
+
+        const bucket = buckets.get(concept);
+        if (!bucket?.length) continue;
+
+        const candidate = pickBestCandidate(bucket);
+        if (!candidate) continue;
+
+        selected.push(candidate);
+        usedObjectives.add(getLearningObjective(candidate));
+    }
+
+    // Only after each available target concept has had a turn do we allow a
+    // second question from the same concept. Repeated passes preserve target
+    // priority while keeping longer sessions balanced.
     while (selected.length < desiredCount) {
         let addedThisPass = false;
 
@@ -219,12 +238,11 @@ if (mode === "weak") {
             if (!bucket?.length) continue;
 
             const candidate = pickBestCandidate(bucket);
+            if (!candidate) continue;
 
-            if (candidate) {
-                selected.push(candidate);
-                usedObjectives.add(getLearningObjective(candidate));
-                addedThisPass = true;
-            }
+            selected.push(candidate);
+            usedObjectives.add(getLearningObjective(candidate));
+            addedThisPass = true;
         }
 
         if (!addedThisPass) break;
