@@ -36,6 +36,8 @@ export interface ConceptMasterySummary {
     correct: number;
     incorrect: number;
     accuracy: number;
+    masteryScore: number;
+    recentCorrectStreak: number;
     lastAnsweredAt?: string;
     status: ConceptMasteryStatus;
 }
@@ -119,25 +121,80 @@ export function saveSessionSummary(
     }
 }
 
+const MASTERY_RECENCY_DECAY = 0.8;
+
+interface ConceptObservation {
+    correct: boolean;
+    answeredAt: string;
+}
+
+function calculateMasteryScore(
+    observations: ConceptObservation[],
+): number {
+    if (!observations.length) return 0;
+
+    const newestFirst = [...observations].sort(
+        (first, second) =>
+            new Date(second.answeredAt).getTime() -
+            new Date(first.answeredAt).getTime(),
+    );
+
+    let weight = 1;
+    let weightedCorrect = 0;
+    let totalWeight = 0;
+
+    newestFirst.forEach((observation) => {
+        weightedCorrect += observation.correct ? weight : 0;
+        totalWeight += weight;
+        weight *= MASTERY_RECENCY_DECAY;
+    });
+
+    return totalWeight > 0
+        ? weightedCorrect / totalWeight
+        : 0;
+}
+
+function getRecentCorrectStreak(
+    observations: ConceptObservation[],
+): number {
+    const newestFirst = [...observations].sort(
+        (first, second) =>
+            new Date(second.answeredAt).getTime() -
+            new Date(first.answeredAt).getTime(),
+    );
+
+    let streak = 0;
+
+    for (const observation of newestFirst) {
+        if (!observation.correct) break;
+        streak += 1;
+    }
+
+    return streak;
+}
+
 function getMasteryStatus(
     attempts: number,
-    accuracy: number,
+    masteryScore: number,
+    recentCorrectStreak: number,
 ): ConceptMasteryStatus {
     if (attempts < 3) {
         return "learning";
     }
 
-    if (accuracy < 0.6) {
+    if (masteryScore < 0.6) {
         return "weak";
     }
 
-    if (accuracy < 0.8) {
-        return "developing";
+    if (
+        masteryScore >= 0.8 &&
+        recentCorrectStreak >= 3
+    ) {
+        return "strong";
     }
 
-    return "strong";
+    return "developing";
 }
-
 
 export function getConceptMastery(
     attempts: PracticeAttempt[] = readPracticeAttempts(),
@@ -147,6 +204,7 @@ export function getConceptMastery(
         {
             attempts: number;
             correct: number;
+            observations: ConceptObservation[];
             lastAnsweredAt?: string;
         }
     >();
@@ -160,6 +218,7 @@ export function getConceptMastery(
             const existing = conceptMap.get(concept) ?? {
                 attempts: 0,
                 correct: 0,
+                observations: [],
                 lastAnsweredAt: undefined,
             };
 
@@ -168,6 +227,11 @@ export function getConceptMastery(
             if (attempt.correct) {
                 existing.correct += 1;
             }
+
+            existing.observations.push({
+                correct: attempt.correct,
+                answeredAt: attempt.answeredAt,
+            });
 
             if (
                 !existing.lastAnsweredAt ||
@@ -187,16 +251,25 @@ export function getConceptMastery(
                     ? stats.correct / stats.attempts
                     : 0;
 
+            const masteryScore =
+                calculateMasteryScore(stats.observations);
+
+            const recentCorrectStreak =
+                getRecentCorrectStreak(stats.observations);
+
             return {
                 concept,
                 attempts: stats.attempts,
                 correct: stats.correct,
                 incorrect: stats.attempts - stats.correct,
                 accuracy,
+                masteryScore,
+                recentCorrectStreak,
                 lastAnsweredAt: stats.lastAnsweredAt,
                 status: getMasteryStatus(
                     stats.attempts,
-                    accuracy,
+                    masteryScore,
+                    recentCorrectStreak,
                 ),
             };
         })
@@ -209,12 +282,69 @@ export function getConceptMastery(
                 return 1;
             }
 
-            if (a.accuracy !== b.accuracy) {
-                return a.accuracy - b.accuracy;
+            if (a.masteryScore !== b.masteryScore) {
+                return a.masteryScore - b.masteryScore;
             }
 
             return b.attempts - a.attempts;
         });
+}
+
+export function getConceptFocusScore(
+    concept: ConceptMasterySummary,
+): number {
+    const statusWeight: Record<ConceptMasteryStatus, number> = {
+        weak: 4,
+        developing: 3,
+        learning: 1,
+        strong: 0,
+    };
+
+    const evidenceWeight =
+        Math.min(concept.attempts, 10) / 10;
+
+    const errorWeight =
+        1 - concept.masteryScore;
+
+    const lastAnsweredTime = concept.lastAnsweredAt
+        ? new Date(concept.lastAnsweredAt).getTime()
+        : 0;
+
+    const daysSinceLastAttempt = lastAnsweredTime
+        ? Math.max(
+            0,
+            (Date.now() - lastAnsweredTime) /
+            (1000 * 60 * 60 * 24),
+        )
+        : 30;
+
+    const recencyWeight =
+        Math.min(daysSinceLastAttempt, 30) / 30;
+
+    return (
+        statusWeight[concept.status] * 10 +
+        errorWeight * 5 +
+        evidenceWeight +
+        recencyWeight
+    );
+}
+
+export function getTargetConcepts(
+    attempts: PracticeAttempt[] = readPracticeAttempts(),
+    limit = 5,
+): ConceptMasterySummary[] {
+    return getConceptMastery(attempts)
+        .filter(
+            (concept) =>
+                concept.status === "weak" ||
+                concept.status === "developing",
+        )
+        .sort(
+            (first, second) =>
+                getConceptFocusScore(second) -
+                getConceptFocusScore(first),
+        )
+        .slice(0, limit);
 }
 
 export function getWeakConcepts(

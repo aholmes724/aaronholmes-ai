@@ -5,11 +5,13 @@ import { allQuestions } from "../../data/questions";
 import { PRACTICE_MODES } from "../../data/practice-modes";
 
 const practiceQuestions = allQuestions;
-
 ---
 
 <Layout title="Practice | Aaron Holmes">
-    <main class="container" data-session-length={Math.min(practiceQuestions.length, 5)}>
+    <main
+        class="container"
+        data-session-length={Math.min(practiceQuestions.length, 5)}
+    >
         <div class="practice-links">
             <a href="/learn">← Back to Learn</a>
             <a href="/progress">View progress</a>
@@ -34,9 +36,7 @@ const practiceQuestions = allQuestions;
         </div>
 
         <div id="practice-mode-info">
-            <p id="practice-description">
-                Review questions across all topics.
-            </p>
+            <p id="practice-description">Review questions across all topics.</p>
         </div>
 
         <div class="practice-session-length">
@@ -51,9 +51,12 @@ const practiceQuestions = allQuestions;
 
         <div id="practice-empty-state" class="practice-empty-state" hidden>
             <p>
-                No questions available in this mode yet. Complete more practice sessions to build up your weak concept history.
+                No questions available in this mode yet. Complete more practice
+                sessions to build up your weak concept history.
             </p>
-            <a href="/practice?mode=all" class="new-session-button">Try another mode</a>
+            <a href="/practice?mode=all" class="new-session-button"
+                >Try another mode</a
+            >
         </div>
 
         <div class="practice-meta">
@@ -61,7 +64,9 @@ const practiceQuestions = allQuestions;
                 <span>Question</span>
                 <strong id="current-question-number">1</strong>
                 <span>of</span>
-                <strong id="session-length">{Math.min(practiceQuestions.length, 5)}</strong>
+                <strong id="session-length"
+                    >{Math.min(practiceQuestions.length, 5)}</strong
+                >
             </p>
 
             <p class="practice-score">
@@ -83,7 +88,12 @@ const practiceQuestions = allQuestions;
         </div>
 
         <div id="next-question-container" class="practice-actions" hidden>
-            <button id="next-question" class="new-session-button" type="button" hidden>
+            <button
+                id="next-question"
+                class="new-session-button"
+                type="button"
+                hidden
+            >
                 Next question
             </button>
         </div>
@@ -100,7 +110,9 @@ const practiceQuestions = allQuestions;
                 <strong id="final-answered">0</strong>
             </p>
             <p>Accuracy: <strong id="final-accuracy">0%</strong></p>
-            <a id="new-session" class="new-session-button" href="/practice">New session</a>
+            <a id="new-session" class="new-session-button" href="/practice"
+                >New session</a
+            >
         </section>
     </main>
 </Layout>
@@ -110,11 +122,10 @@ const practiceQuestions = allQuestions;
         savePracticeAttempt,
         readPracticeAttempts,
         saveSessionSummary,
+        getTargetConcepts,
     } from "../../data/attempts";
     import {
         matchesMode,
-        matchesWeakConcepts,
-        getWeakConceptsFromAttempts,
         getModeDescription,
         type QuestionMeta,
     } from "../../data/practice-modes";
@@ -149,9 +160,11 @@ const practiceQuestions = allQuestions;
         document.querySelector<HTMLElement>("#final-answered");
     const finalAccuracy =
         document.querySelector<HTMLElement>("#final-accuracy");
-    const sessionLengthSelect =
-        document.querySelector<HTMLSelectElement>("#session-length-select");
-    const newSession = document.querySelector<HTMLAnchorElement>("#new-session");
+    const sessionLengthSelect = document.querySelector<HTMLSelectElement>(
+        "#session-length-select",
+    );
+    const newSession =
+        document.querySelector<HTMLAnchorElement>("#new-session");
     const sessionCandidates = Array.from(
         document.querySelectorAll<HTMLElement>("[data-session-question]"),
     );
@@ -180,8 +193,6 @@ const practiceQuestions = allQuestions;
             window.location.href = newUrl;
         });
     });
-
-
 
     // Update description
     if (practiceDescription) {
@@ -226,34 +237,69 @@ const practiceQuestions = allQuestions;
         learningStage: quiz?.dataset.learningStage,
     });
 
-    // Filter questions by mode using the single shared mode-matching rules
+    // Filter questions by mode using shared mode rules.
+    // Weak mode is now targeted: rank concepts using the same logic as Focus next,
+    // then prioritize questions whose primary mastery concept matches that ranking.
     let filteredByMode: HTMLElement[] = [];
+
     if (mode === "weak") {
         const attempts = readPracticeAttempts();
-        const weakConcepts = getWeakConceptsFromAttempts(attempts);
+        const targetConcepts = getTargetConcepts(attempts, 10);
+        const targetRank = new Map(
+            targetConcepts.map((concept, index) => [concept.concept, index]),
+        );
 
-        filteredByMode = sessionCandidates.filter((question) => {
-            const quiz = question.querySelector<HTMLElement>(".quiz-question");
-            return matchesWeakConcepts(toQuestionMeta(quiz), weakConcepts);
-        });
+        filteredByMode = sessionCandidates
+            .filter((question) => {
+                const quiz =
+                    question.querySelector<HTMLElement>(".quiz-question");
+                const masteryConcept = quiz?.dataset.masteryConcept;
+
+                return Boolean(
+                    masteryConcept && targetRank.has(masteryConcept),
+                );
+            })
+            .sort((first, second) => {
+                const firstConcept =
+                    first.querySelector<HTMLElement>(".quiz-question")?.dataset
+                        .masteryConcept ?? "";
+                const secondConcept =
+                    second.querySelector<HTMLElement>(".quiz-question")?.dataset
+                        .masteryConcept ?? "";
+
+                const firstRank =
+                    targetRank.get(firstConcept) ?? Number.MAX_SAFE_INTEGER;
+                const secondRank =
+                    targetRank.get(secondConcept) ?? Number.MAX_SAFE_INTEGER;
+
+                if (firstRank !== secondRank) {
+                    return firstRank - secondRank;
+                }
+
+                return Math.random() - 0.5;
+            });
     } else {
         filteredByMode = sessionCandidates.filter((question) => {
             const quiz = question.querySelector<HTMLElement>(".quiz-question");
+
             if (!quiz) return false;
 
-            // Backward-compatible topic filter, only meaningful for "all" mode
+            // Backward-compatible topic filter, only meaningful for "all" mode.
             if (mode === "all" && topic && quiz.dataset.topic !== topic) {
                 return false;
             }
 
             return matchesMode(toQuestionMeta(quiz), mode);
         });
+
+        // Non-targeted modes remain randomized.
+        filteredByMode.sort(() => Math.random() - 0.5);
     }
 
-    // Randomize and slice
-    const sessionQuestions = filteredByMode
-        .sort(() => Math.random() - 0.5)
-        .slice(0, selectedLength === "all" ? undefined : Number(selectedLength));
+    const sessionQuestions = filteredByMode.slice(
+        0,
+        selectedLength === "all" ? undefined : Number(selectedLength),
+    );
 
     // Generic empty state: applies to weak concepts and to any domain with no questions yet
     if (practiceEmptyState) {
@@ -267,9 +313,8 @@ const practiceQuestions = allQuestions;
     });
 
     const sessionLength = sessionQuestions.length;
-    const sessionLengthElement = document.querySelector<HTMLElement>(
-        "#session-length",
-    );
+    const sessionLengthElement =
+        document.querySelector<HTMLElement>("#session-length");
     if (sessionLengthElement) {
         sessionLengthElement.textContent = sessionLength.toString();
     }
@@ -297,9 +342,7 @@ const practiceQuestions = allQuestions;
         const quiz = (event.target as HTMLElement | null)?.closest<HTMLElement>(
             ".quiz-question",
         );
-        const concepts = quiz?.dataset.concepts
-            ?.split(",")
-            .filter(Boolean);
+        const concepts = quiz?.dataset.concepts?.split(",").filter(Boolean);
         const difficulty = quiz?.dataset.difficulty;
         const learningStage = quiz?.dataset.learningStage;
         const masteryConcept = quiz?.dataset.masteryConcept;
@@ -313,12 +356,13 @@ const practiceQuestions = allQuestions;
             ...(quiz?.dataset.topic && { topic: quiz.dataset.topic }),
             ...(concepts?.length && { concepts }),
             ...(masteryConcept && { masteryConcept }),
-            ...(difficulty && { difficulty: difficulty as "beginner" | "intermediate" | "advanced" }),
+            ...(difficulty && {
+                difficulty: difficulty as
+                    "beginner" | "intermediate" | "advanced",
+            }),
             ...(learningStage && {
                 learningStage: learningStage as
-                    | "recognition"
-                    | "understanding"
-                    | "application",
+                    "recognition" | "understanding" | "application",
             }),
         });
 
@@ -338,7 +382,8 @@ const practiceQuestions = allQuestions;
 
         if (totalAnswered === sessionLength) {
             if (finalScore) finalScore.textContent = correctAnswers.toString();
-            if (finalAnswered) finalAnswered.textContent = totalAnswered.toString();
+            if (finalAnswered)
+                finalAnswered.textContent = totalAnswered.toString();
             if (finalAccuracy) {
                 finalAccuracy.textContent = `${Math.round((correctAnswers / sessionLength) * 100)}%`;
             }
@@ -353,8 +398,6 @@ const practiceQuestions = allQuestions;
         if (nextQuestionContainer) nextQuestionContainer.hidden = false;
     });
 
-
-
     sessionLengthSelect?.addEventListener("change", () => {
         window.location.href = buildPracticeUrl(
             mode,
@@ -364,8 +407,14 @@ const practiceQuestions = allQuestions;
     });
 
     nextQuestion?.addEventListener("click", () => {
-        if (!answeredQuestions.has(sessionQuestions[currentQuestionIndex]
-            ?.querySelector<HTMLElement>(".quiz-question")?.dataset.questionId ?? "")) {
+        if (
+            !answeredQuestions.has(
+                sessionQuestions[
+                    currentQuestionIndex
+                ]?.querySelector<HTMLElement>(".quiz-question")?.dataset
+                    .questionId ?? "",
+            )
+        ) {
             return;
         }
 
@@ -396,7 +445,9 @@ const practiceQuestions = allQuestions;
         sessionQuestions[currentQuestionIndex].hidden = false;
 
         if (currentQuestionNumber) {
-            currentQuestionNumber.textContent = (currentQuestionIndex + 1).toString();
+            currentQuestionNumber.textContent = (
+                currentQuestionIndex + 1
+            ).toString();
         }
         nextQuestion.hidden = true;
         if (nextQuestionContainer) nextQuestionContainer.hidden = true;
