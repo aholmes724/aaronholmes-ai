@@ -3,9 +3,9 @@
 
     <form class="question-feedback-form" hidden>
         <label>
-            What should we improve?
+            Reason <span class="question-feedback-optional">(optional)</span>
             <select name="reason">
-                <option value="general-quality" selected>General quality issue</option>
+                <option value="" selected>No reason selected</option>
                 <option value="wording-gives-away-answer">Wording gives away the answer</option>
                 <option value="distractors-unrealistic">Distractors are unrealistic</option>
                 <option value="answer-too-obvious">Answer is too obvious</option>
@@ -57,12 +57,12 @@
             if (!quiz) return;
 
             const data = new FormData(form);
-            const reason = data.get("reason") as QuestionFeedbackReason;
+            const reasonValue = data.get("reason")?.toString().trim();
             const note = data.get("note")?.toString().trim();
 
             saveQuestionFeedback({
                 questionId: quiz.dataset.questionId ?? "unknown",
-                reason,
+                ...(reasonValue && { reason: reasonValue as QuestionFeedbackReason }),
                 ...(note && { note }),
                 ...(quiz.dataset.topic && { topic: quiz.dataset.topic }),
                 ...(quiz.dataset.masteryConcept && { masteryConcept: quiz.dataset.masteryConcept }),
