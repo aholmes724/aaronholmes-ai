@@ -333,7 +333,9 @@ export function getTargetConcepts(
     attempts: PracticeAttempt[] = readPracticeAttempts(),
     limit = 5,
 ): ConceptMasterySummary[] {
-    return getConceptMastery(attempts)
+    const mastery = getConceptMastery(attempts);
+
+    const priority = mastery
         .filter(
             (concept) =>
                 concept.status === "weak" ||
@@ -343,8 +345,30 @@ export function getTargetConcepts(
             (first, second) =>
                 getConceptFocusScore(second) -
                 getConceptFocusScore(first),
-        )
-        .slice(0, limit);
+        );
+
+    if (priority.length >= limit) {
+        return priority.slice(0, limit);
+    }
+
+    // When too few weak/developing concepts exist to make a varied session,
+    // fill the remaining target slots with limited-data concepts. This keeps
+    // weak concepts first while preventing a short targeted session from
+    // becoming five versions of the same concept.
+    const limitedData = mastery
+        .filter((concept) => concept.status === "learning")
+        .sort((first, second) => {
+            if (first.attempts !== second.attempts) {
+                return first.attempts - second.attempts;
+            }
+
+            return (
+                getConceptFocusScore(second) -
+                getConceptFocusScore(first)
+            );
+        });
+
+    return [...priority, ...limitedData].slice(0, limit);
 }
 
 export function getWeakConcepts(
