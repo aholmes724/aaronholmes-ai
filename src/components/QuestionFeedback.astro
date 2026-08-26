@@ -1,7 +1,5 @@
 <div class="question-feedback" data-question-feedback>
-    <button class="question-feedback-toggle secondary-button" type="button">
-        Flag question
-    </button>
+    <button class="question-feedback-toggle secondary-button" type="button">Flag question</button>
 
     <form class="question-feedback-form" hidden>
         <label>
@@ -18,19 +16,12 @@
 
         <label>
             Note <span class="question-feedback-optional">(optional)</span>
-            <textarea
-                name="note"
-                rows="2"
-                maxlength="500"
-                placeholder="What tipped you off or should change?"
-            ></textarea>
+            <textarea name="note" rows="2" maxlength="500" placeholder="What tipped you off or should change?"></textarea>
         </label>
 
         <div class="question-feedback-actions">
             <button class="new-session-button" type="submit">Save flag</button>
-            <button class="question-feedback-cancel secondary-button" type="button">
-                Cancel
-            </button>
+            <button class="question-feedback-cancel secondary-button" type="button">Cancel</button>
         </div>
     </form>
 
@@ -40,69 +31,118 @@
 </div>
 
 <script>
-    import {
-        saveQuestionFeedback,
-        type QuestionFeedbackReason,
-    } from "../data/question-feedback";
+    import { saveQuestionFeedback, type QuestionFeedbackReason } from "../data/question-feedback";
 
-    document
-        .querySelectorAll<HTMLElement>("[data-question-feedback]")
-        .forEach((container) => {
-            const quiz = container.closest<HTMLElement>(".quiz-question");
-            const toggle = container.querySelector<HTMLButtonElement>(
-                ".question-feedback-toggle",
-            );
-            const form = container.querySelector<HTMLFormElement>(
-                ".question-feedback-form",
-            );
-            const cancel = container.querySelector<HTMLButtonElement>(
-                ".question-feedback-cancel",
-            );
-            const saved = container.querySelector<HTMLElement>(
-                ".question-feedback-saved",
-            );
+    document.querySelectorAll<HTMLElement>("[data-question-feedback]").forEach((container) => {
+        const quiz = container.closest<HTMLElement>(".quiz-question");
+        const toggle = container.querySelector<HTMLButtonElement>(".question-feedback-toggle");
+        const form = container.querySelector<HTMLFormElement>(".question-feedback-form");
+        const cancel = container.querySelector<HTMLButtonElement>(".question-feedback-cancel");
+        const saved = container.querySelector<HTMLElement>(".question-feedback-saved");
 
-            toggle?.addEventListener("click", () => {
-                if (!form) return;
-                form.hidden = !form.hidden;
-                if (!form.hidden) {
-                    form.querySelector<HTMLSelectElement>("select")?.focus();
-                }
-            });
-
-            cancel?.addEventListener("click", () => {
-                if (form) form.hidden = true;
-                toggle?.focus();
-            });
-
-            form?.addEventListener("submit", (event) => {
-                event.preventDefault();
-                if (!quiz) return;
-
-                const data = new FormData(form);
-                const reason = data.get("reason") as QuestionFeedbackReason;
-                const note = data.get("note")?.toString().trim();
-
-                saveQuestionFeedback({
-                    questionId: quiz.dataset.questionId ?? "unknown",
-                    reason,
-                    ...(note && { note }),
-                    ...(quiz.dataset.topic && { topic: quiz.dataset.topic }),
-                    ...(quiz.dataset.masteryConcept && {
-                        masteryConcept: quiz.dataset.masteryConcept,
-                    }),
-                    ...(quiz.dataset.learningObjective && {
-                        learningObjective: quiz.dataset.learningObjective,
-                    }),
-                    ...(quiz.dataset.learningStage && {
-                        learningStage: quiz.dataset.learningStage,
-                    }),
-                });
-
-                form.reset();
-                form.hidden = true;
-                if (toggle) toggle.hidden = true;
-                if (saved) saved.hidden = false;
-            });
+        toggle?.addEventListener("click", () => {
+            if (!form) return;
+            form.hidden = !form.hidden;
+            if (!form.hidden) form.querySelector<HTMLSelectElement>("select")?.focus();
         });
+
+        cancel?.addEventListener("click", () => {
+            if (form) form.hidden = true;
+            toggle?.focus();
+        });
+
+        form?.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (!quiz) return;
+
+            const data = new FormData(form);
+            const reason = data.get("reason") as QuestionFeedbackReason;
+            const note = data.get("note")?.toString().trim();
+
+            saveQuestionFeedback({
+                questionId: quiz.dataset.questionId ?? "unknown",
+                reason,
+                ...(note && { note }),
+                ...(quiz.dataset.topic && { topic: quiz.dataset.topic }),
+                ...(quiz.dataset.masteryConcept && { masteryConcept: quiz.dataset.masteryConcept }),
+                ...(quiz.dataset.learningObjective && { learningObjective: quiz.dataset.learningObjective }),
+                ...(quiz.dataset.learningStage && { learningStage: quiz.dataset.learningStage }),
+            });
+
+            form.reset();
+            form.hidden = true;
+            if (toggle) toggle.hidden = true;
+            if (saved) saved.hidden = false;
+        });
+    });
 </script>
+
+<style>
+    .question-feedback {
+        margin-top: 1rem;
+        padding-top: 0.9rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .question-feedback-toggle {
+        padding: 0.45rem 0.7rem;
+        font-size: 0.9rem;
+    }
+
+    .question-feedback-form {
+        display: grid;
+        gap: 0.85rem;
+        margin-top: 0.75rem;
+        padding: 0.9rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        background: var(--surface-alt);
+    }
+
+    .question-feedback-form[hidden],
+    .question-feedback-saved[hidden] {
+        display: none;
+    }
+
+    .question-feedback-form label {
+        display: grid;
+        gap: 0.35rem;
+        font-weight: 600;
+    }
+
+    .question-feedback-form select,
+    .question-feedback-form textarea {
+        width: 100%;
+        padding: 0.55rem 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+    }
+
+    .question-feedback-form textarea {
+        resize: vertical;
+    }
+
+    .question-feedback-optional,
+    .question-feedback-saved {
+        color: var(--text-muted);
+        font-weight: 400;
+    }
+
+    .question-feedback-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+    }
+
+    .question-feedback-actions button {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .question-feedback-saved {
+        margin: 0.75rem 0 0;
+        font-size: 0.9rem;
+    }
+</style>
