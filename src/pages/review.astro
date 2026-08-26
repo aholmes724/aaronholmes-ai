@@ -91,8 +91,11 @@ import Layout from "../layouts/Layout.astro";
         const reasonCounts = new Map<QuestionFeedbackReason, number>();
         QUESTION_FEEDBACK_REASONS.forEach((reason) => reasonCounts.set(reason, 0));
         feedback.forEach((item) => {
+            if (!item.reason) return;
             reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
         });
+
+        const bareFlagCount = feedback.filter((item) => !item.reason).length;
 
         const summary = document.querySelector<HTMLElement>("#feedback-summary");
         if (summary) {
@@ -103,14 +106,23 @@ import Layout from "../layouts/Layout.astro";
                     .filter(([, count]) => count > 0)
                     .sort((first, second) => second[1] - first[1]);
 
+                const summaryEntries: string[][] = [
+                    ["Total flags", feedback.length.toString()],
+                ];
+
+                if (bareFlagCount > 0) {
+                    summaryEntries.push(["Bare flags", bareFlagCount.toString()]);
+                }
+
+                summaryEntries.push(
+                    ...reasonEntries.slice(0, 2).map(([reason, count]) => [
+                        getFeedbackReasonLabel(reason),
+                        count.toString(),
+                    ]),
+                );
+
                 summary.replaceChildren(
-                    ...[
-                        ["Total flags", feedback.length.toString()],
-                        ...reasonEntries.slice(0, 2).map(([reason, count]) => [
-                            getFeedbackReasonLabel(reason),
-                            count.toString(),
-                        ]),
-                    ].map(([labelText, valueText]) => {
+                    ...summaryEntries.map(([labelText, valueText]) => {
                         const wrapper = document.createElement("div");
                         const label = document.createElement("dt");
                         const value = document.createElement("dd");
@@ -130,7 +142,9 @@ import Layout from "../layouts/Layout.astro";
                 .sort((first, second) => second[1] - first[1]);
 
             if (!rankedReasons.length) {
-                guidance.innerHTML = "<p>No question feedback yet.</p>";
+                guidance.innerHTML = bareFlagCount
+                    ? `<p>${bareFlagCount} bare flag${bareFlagCount === 1 ? "" : "s"} indicate question${bareFlagCount === 1 ? "" : "s"} that need review, but there is not enough categorized feedback yet to infer a generation rule.</p>`
+                    : "<p>No question feedback yet.</p>";
             } else {
                 const heading = document.createElement("strong");
                 heading.textContent = "Current quality guidance";
@@ -187,7 +201,9 @@ import Layout from "../layouts/Layout.astro";
                 items.forEach((item) => {
                     const line = document.createElement("li");
                     const note = item.note ? ` — ${item.note}` : "";
-                    line.textContent = `${getFeedbackReasonLabel(item.reason)}${note}`;
+                    line.textContent = item.reason
+                        ? `${getFeedbackReasonLabel(item.reason)}${note}`
+                        : `Bare flag${note}`;
                     reasons.append(line);
                 });
 
