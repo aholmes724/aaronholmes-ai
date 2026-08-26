@@ -2,6 +2,7 @@ export const QUESTION_FEEDBACK_STORAGE_KEY = "aaronholmes.question-feedback";
 export const QUESTION_REVIEW_STORAGE_KEY = "aaronholmes.question-review-state";
 
 export const QUESTION_FEEDBACK_REASONS = [
+    "general-quality",
     "wording-gives-away-answer",
     "distractors-unrealistic",
     "answer-too-obvious",
@@ -51,8 +52,6 @@ function deduplicateQuestionFeedback(
             return;
         }
 
-        // Keep a useful note if one version has it, while treating repeated
-        // submissions of the same reason for the same question as one flag.
         if (!existing.note && entry.note) {
             byQuestionAndReason.set(key, {
                 ...existing,
@@ -76,8 +75,6 @@ export function readQuestionFeedback(): QuestionFeedback[] {
             parsed as QuestionFeedback[],
         );
 
-        // Opportunistically clean up older duplicate entries already stored in
-        // the browser so review counts stay accurate after this update.
         if (deduplicated.length !== parsed.length) {
             localStorage.setItem(
                 QUESTION_FEEDBACK_STORAGE_KEY,
@@ -200,6 +197,7 @@ export function getFeedbackReasonLabel(
     reason: QuestionFeedbackReason,
 ): string {
     const labels: Record<QuestionFeedbackReason, string> = {
+        "general-quality": "General quality issue",
         "wording-gives-away-answer": "Wording gives away the answer",
         "distractors-unrealistic": "Distractors are unrealistic",
         "answer-too-obvious": "Answer is too obvious",
