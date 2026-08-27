@@ -23,6 +23,7 @@ export interface QuestionFeedback {
     id: string;
     questionId: string;
     questionVersion: number;
+    semanticKey?: string;
     reason?: QuestionFeedbackReason;
     note?: string;
     createdAt: string;
@@ -68,10 +69,16 @@ function normalizeQuestionFeedback(
                 typeof rawVersion === "number" && Number.isInteger(rawVersion) && rawVersion > 0
                     ? rawVersion
                     : 1;
+            const rawSemanticKey = (entry as { semanticKey?: unknown }).semanticKey;
+            const semanticKey =
+                typeof rawSemanticKey === "string" && rawSemanticKey.trim()
+                    ? rawSemanticKey.trim()
+                    : undefined;
 
             return {
                 ...entry,
                 questionVersion,
+                ...(semanticKey ? { semanticKey } : {}),
                 ...(reason ? { reason } : {}),
                 ...(!reason && "reason" in entry ? { reason: undefined } : {}),
             };
@@ -131,6 +138,9 @@ export function saveQuestionFeedback(
     const normalizedFeedback = {
         ...feedback,
         questionVersion: feedback.questionVersion || 1,
+        ...(feedback.semanticKey?.trim()
+            ? { semanticKey: feedback.semanticKey.trim() }
+            : {}),
     };
     const saved: QuestionFeedback = {
         ...normalizedFeedback,
