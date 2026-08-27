@@ -4,8 +4,8 @@ const corsHeaders = {
 };
 
 const MODEL = "gpt-5.4-mini";
-const HARNESS_VERSION = "1.0.0";
-const PROMPT_VERSION = "2026-08-26.1";
+const HARNESS_VERSION = "1.1.0";
+const PROMPT_VERSION = "2026-08-26.2";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 
@@ -27,7 +27,7 @@ function extractOutputText(response: any): string {
   return pieces.join("");
 }
 
-function normalizeDrafts(result: any, request: any) {
+function normalizeDrafts(result: any, request: any, verificationTier: "classroom" | "high-assurance") {
   const sourceIds = new Set((request.curriculum?.sources ?? []).map((source: any) => source.id));
   const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((objective: any) => objective.id));
   const conceptIds = new Set((request.curriculum?.concepts ?? []).map((concept: any) => concept.id));
@@ -60,13 +60,14 @@ function normalizeDrafts(result: any, request: any) {
       ...raw,
       version: 1,
       type: "single-select",
-      validationStatus: "approved",
+      validationStatus: "draft",
       shuffleAnswers: true,
       generation: {
         provider: "openai",
         model: MODEL,
         harnessVersion: HARNESS_VERSION,
         promptVersion: PROMPT_VERSION,
+        verificationTier,
       },
     });
   }
@@ -91,6 +92,7 @@ Deno.serve(async (req) => {
   const sourceText = typeof request?.sourceText === "string" ? request.sourceText.trim() : "";
   const curriculum = request?.curriculum;
   const targetQuestionCount = Math.min(Math.max(Number(request?.targetQuestionCount) || 8, 3), MAX_QUESTIONS);
+  const verificationTier = request?.verificationTier === "high-assurance" ? "high-assurance" : "classroom";
 
   if (!curriculum || !sourceText) return json({ message: "Curriculum and source text are required." }, 400);
   if (sourceText.length > MAX_SOURCE_CHARS) return json({ message: `Source is too large for this beta (${MAX_SOURCE_CHARS} character limit).` }, 413);
@@ -117,128 +119,42 @@ Deno.serve(async (req) => {
           additionalProperties: false,
           required: ["id", "semanticKey", "prompt", "answers", "topic", "conceptIds", "masteryConcept", "learningObjectiveId", "difficulty", "learningStage", "explanation", "sourceId", "sourceReference", "sourceEvidence"],
           properties: {
-            id: { type: "string" },
-            semanticKey: { type: "string" },
-            prompt: { type: "string" },
-            answers: {
-              type: "array",
-              minItems: 3,
-              maxItems: 5,
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["id", "text", "correct", "feedback"],
-                properties: {
-                  id: { type: "string" },
-                  text: { type: "string" },
-                  correct: { type: "boolean" },
-                  feedback: { type: "string" },
-                },
-              },
-            },
+            id: { type: "string" }, semanticKey: { type: "string" }, prompt: { type: "string" },
+            answers: { type: "array", minItems: 3, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["id", "text", "correct", "feedback"], properties: { id: { type: "string" }, text: { type: "string" }, correct: { type: "boolean" }, feedback: { type: "string" } } } },
             topic: { type: "string" },
             conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } },
             masteryConcept: { type: "string", enum: conceptIds },
             learningObjectiveId: { type: "string", enum: objectiveIds },
             difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
             learningStage: { type: "string", enum: ["recognition", "understanding", "application"] },
-            explanation: { type: "string" },
-            sourceId: { type: "string", enum: sourceIds },
-            sourceReference: { type: "string" },
-            sourceEvidence: {
-              type: "object",
-              additionalProperties: false,
-              required: ["sourceId", "reference", "excerpt", "locator"],
-              properties: {
-                sourceId: { type: "string", enum: sourceIds },
-                reference: { type: "string" },
-                excerpt: { type: "string" },
-                locator: { type: "string" },
-              },
-            },
+            explanation: { type: "string" }, sourceId: { type: "string", enum: sourceIds }, sourceReference: { type: "string" },
+            sourceEvidence: { type: "object", additionalProperties: false, required: ["sourceId", "reference", "excerpt", "locator"], properties: { sourceId: { type: "string", enum: sourceIds }, reference: { type: "string" }, excerpt: { type: "string" }, locator: { type: "string" } } },
           },
         },
       },
     },
   };
 
-  const systemPrompt = `You are the question-generation engine for a privacy-minimizing learning app.\n\nPrimary goal: measure and strengthen genuine understanding, not test-taking acumen. Treat clever learners as adversarial evaluators who will exploit answer length, absolute qualifiers, grammatical cues, repeated answer positions, simplistic distractors, and memorized templates.\n\nGrounding rules:\n- Use ONLY the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by a small source excerpt returned as sourceEvidence.\n- If the source does not support a defensible question, do not invent one.\n- Use exact supplied source, concept, and learning-objective IDs.\n\nQuestion-quality rules:\n- Prefer understanding and application over vocabulary recognition.\n- Distractors must represent realistic misconceptions or nearby concepts, not absurd alternatives.\n- Do not make the correct answer uniquely nuanced, longest, or professionally worded.\n- Use words such as always, never, only, every, guaranteed, obviously, and clearly only when technically necessary; do not use them as giveaway signals.\n- Vary question structure and answer position.\n- Explanations should teach why the answer is correct and, where useful, clarify the tempting misconception.\n\nSafety/suitability:\n- Do not convert material into procedural training that meaningfully facilitates serious physical harm, weapon construction/use, self-harm, illicit drug production, credential theft, malware deployment, sexual exploitation, or comparable wrongdoing.\n- Historical, literary, safety, defensive, scientific, and high-level educational treatment of sensitive subjects may still be suitable when the questions do not operationalize harm.\n- If the source is primarily unsuitable for question generation, return suitability=blocked and no drafts. If only portions are unsuitable, return suitability=limited and generate only safe educational questions from appropriate portions.\n\nReturn up to the requested number of strong questions; quality is more important than hitting the count.`;
+  const tierRules = verificationTier === "high-assurance"
+    ? `High-assurance verification mode:\n- Be more conservative than normal classroom generation.\n- Generate a question only when the supplied source states or strongly entails the correct answer without relying on outside knowledge.\n- Prefer narrowly supported claims over broad generalizations.\n- Source evidence must directly support the precise distinction tested.\n- If wording in the source is ambiguous, incomplete, outdated, or insufficient, omit that question rather than resolve it yourself.\n- This is a stricter source-grounding tier, not independent external corroboration.`
+    : `Classroom verification mode:\n- Treat the supplied curriculum as the instructional authority.\n- Ground each answer and explanation directly in that curriculum.\n- This tier is appropriate for normal teacher-reviewed public educational use.`;
 
-  const userPrompt = JSON.stringify({
-    curriculum: {
-      id: curriculum.id,
-      title: curriculum.title,
-      sources: curriculum.sources,
-      concepts: curriculum.concepts,
-      learningObjectives: curriculum.learningObjectives,
-    },
-    targetQuestionCount,
-    qualityGuidance: request.qualityGuidance ?? [],
-    sourceText,
-  });
+  const systemPrompt = `You are the question-generation engine for a privacy-minimizing learning app.\n\nPrimary goal: measure and strengthen genuine understanding, not test-taking acumen. Treat clever learners as adversarial evaluators who will exploit answer length, absolute qualifiers, grammatical cues, repeated answer positions, simplistic distractors, and memorized templates.\n\n${tierRules}\n\nGrounding rules:\n- Use ONLY the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by a small source excerpt returned as sourceEvidence.\n- If the source does not support a defensible question, do not invent one.\n- Use exact supplied source, concept, and learning-objective IDs.\n\nQuestion-quality rules:\n- Prefer understanding and application over vocabulary recognition.\n- Distractors must represent realistic misconceptions or nearby concepts, not absurd alternatives.\n- Do not make the correct answer uniquely nuanced, longest, or professionally worded.\n- Use words such as always, never, only, every, guaranteed, obviously, and clearly only when technically necessary; do not use them as giveaway signals.\n- Vary question structure and answer position.\n- Explanations should teach why the answer is correct and, where useful, clarify the tempting misconception.\n\nSafety/suitability:\n- Do not convert material into procedural training that meaningfully facilitates serious physical harm, weapon construction/use, self-harm, illicit drug production, credential theft, malware deployment, sexual exploitation, or comparable wrongdoing.\n- Historical, literary, safety, defensive, scientific, and high-level educational treatment of sensitive subjects may still be suitable when the questions do not operationalize harm.\n- If the source is primarily unsuitable for question generation, return suitability=blocked and no drafts. If only portions are unsuitable, return suitability=limited and generate only safe educational questions from appropriate portions.\n\nAll generated questions are DRAFTS for educator/author review. Never imply model generation equals teacher approval. Return up to the requested number of strong questions; quality is more important than hitting the count.`;
 
-  const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "grounded_question_generation",
-          strict: true,
-          schema,
-        },
-      },
-    }),
-  });
+  const userPrompt = JSON.stringify({ curriculum: { id: curriculum.id, title: curriculum.title, sources: curriculum.sources, concepts: curriculum.concepts, learningObjectives: curriculum.learningObjectives }, targetQuestionCount, verificationTier, qualityGuidance: request.qualityGuidance ?? [], sourceText });
 
-  if (!openAiResponse.ok) {
-    const detail = await openAiResponse.text();
-    console.error("OpenAI generation failed", openAiResponse.status, detail);
-    return json({ message: `Model generation failed (${openAiResponse.status}).` }, 502);
-  }
+  const openAiResponse = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], text: { format: { type: "json_schema", name: "grounded_question_generation", strict: true, schema } } }) });
 
+  if (!openAiResponse.ok) { const detail = await openAiResponse.text(); console.error("OpenAI generation failed", openAiResponse.status, detail); return json({ message: `Model generation failed (${openAiResponse.status}).` }, 502); }
   const modelResponse = await openAiResponse.json();
   const outputText = extractOutputText(modelResponse);
   if (!outputText) return json({ message: "The model returned no structured output." }, 502);
 
   let result: any;
-  try {
-    result = JSON.parse(outputText);
-  } catch {
-    return json({ message: "The model returned invalid structured output." }, 502);
-  }
+  try { result = JSON.parse(outputText); } catch { return json({ message: "The model returned invalid structured output." }, 502); }
 
-  if (result.suitability === "blocked") {
-    return json({
-      ok: false,
-      drafts: [],
-      rejectedCount: 0,
-      warnings: [],
-      suitability: "blocked",
-      message: result.message || "This material is not suitable for generated practice.",
-      provider: "openai",
-      model: MODEL,
-    });
-  }
+  if (result.suitability === "blocked") return json({ ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked", message: result.message || "This material is not suitable for generated practice.", provider: "openai", model: MODEL });
 
-  const normalized = normalizeDrafts(result, request);
-  return json({
-    ok: normalized.accepted.length > 0,
-    drafts: normalized.accepted,
-    rejectedCount: normalized.rejectedCount,
-    warnings: normalized.warnings,
-    suitability: result.suitability,
-    message: result.message,
-    provider: "openai",
-    model: MODEL,
-  });
+  const normalized = normalizeDrafts(result, request, verificationTier);
+  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: normalized.rejectedCount, warnings: normalized.warnings, suitability: result.suitability, message: result.message, provider: "openai", model: MODEL, verificationTier });
 });
