@@ -5,6 +5,7 @@ const BARE_REASON = "bare";
 
 export interface SharedQuestionFeedbackSummary {
     questionId: string;
+    questionVersion: number;
     totalFlags: number;
     uniqueClients: number;
     reasonCounts: Map<QuestionFeedbackReason | "bare", number>;
@@ -50,17 +51,6 @@ const headersFor = (anonKey: string): HeadersInit => ({
     "Content-Type": "application/json",
 });
 
-/**
- * Best-effort remote sync for aggregate question-quality feedback.
- *
- * Free-text notes intentionally stay local for now. The shared table receives
- * only question metadata and an anonymous browser id so aggregate feedback can
- * improve question quality without publishing a learner's note.
- *
- * The database has a unique constraint on client_id + question_id + reason,
- * so the same browser cannot inflate a shared count by repeatedly submitting
- * the same reason for the same question. Re-submission updates the existing row.
- */
 export async function syncQuestionFeedback(
     feedback: QuestionFeedback,
 ): Promise<boolean> {
@@ -68,10 +58,11 @@ export async function syncQuestionFeedback(
     if (!config) return false;
 
     const reason = feedback.reason ?? BARE_REASON;
+    const questionVersion = feedback.questionVersion || 1;
 
     try {
         const response = await fetch(
-            `${config.url}/rest/v1/question_feedback?on_conflict=client_id,question_id,reason`,
+            `${config.url}/rest/v1/question_feedback?on_conflict=client_id,question_id,question_version,reason`,
             {
                 method: "POST",
                 headers: {
@@ -81,6 +72,7 @@ export async function syncQuestionFeedback(
                 body: JSON.stringify({
                     client_id: getClientId(),
                     question_id: feedback.questionId,
+                    question_version: questionVersion,
                     reason,
                     topic: feedback.topic ?? null,
                     mastery_concept: feedback.masteryConcept ?? null,
@@ -98,18 +90,13 @@ export async function syncQuestionFeedback(
     }
 }
 
-/**
- * Reads anonymous aggregate-source rows from the shared store and summarizes
- * them in the browser. Individual client ids are used only to count independent
- * browsers; they are never displayed in the UI.
- */
 export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary | null> {
     const config = getConfig();
     if (!config) return null;
 
     try {
         const response = await fetch(
-            `${config.url}/rest/v1/question_feedback?select=client_id,question_id,reason`,
+            `${config.url}/rest/v1/question_feedback?select=client_id,question_id,question_version,reason`,
             {
                 headers: headersFor(config.anonKey),
             },
@@ -120,15 +107,18 @@ export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary
         const rows = (await response.json()) as Array<{
             client_id?: string;
             question_id?: string;
+            question_version?: number;
             reason?: string;
         }>;
 
         const reasonCounts = new Map<QuestionFeedbackReason | "bare", number>();
-        const questionIds = new Set<string>();
+        const questionVersionKeys = new Set<string>();
         const clientIds = new Set<string>();
         const grouped = new Map<
             string,
             {
+                questionId: string;
+                questionVersion: number;
                 totalFlags: number;
                 clientIds: Set<string>;
                 reasonCounts: Map<QuestionFeedbackReason | "bare", number>;
@@ -138,13 +128,17 @@ export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary
         rows.forEach((row) => {
             if (!row.question_id) return;
 
-            questionIds.add(row.question_id);
+            const questionVersion = row.question_version || 1;
+            const questionKey = `${row.question_id}::v${questionVersion}`;
+            questionVersionKeys.add(questionKey);
             if (row.client_id) clientIds.add(row.client_id);
 
             const reason = (row.reason || BARE_REASON) as QuestionFeedbackReason | "bare";
             reasonCounts.set(reason, (reasonCounts.get(reason) ?? 0) + 1);
 
-            const question = grouped.get(row.question_id) ?? {
+            const question = grouped.get(questionKey) ?? {
+                questionId: row.question_id,
+                questionVersion,
                 totalFlags: 0,
                 clientIds: new Set<string>(),
                 reasonCounts: new Map<QuestionFeedbackReason | "bare", number>(),
@@ -156,14 +150,15 @@ export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary
                 reason,
                 (question.reasonCounts.get(reason) ?? 0) + 1,
             );
-            grouped.set(row.question_id, question);
+            grouped.set(questionKey, question);
         });
 
-        const questions = Array.from(grouped.entries())
-            .map(([questionId, stats]): SharedQuestionFeedbackSummary => {
+        const questions = Array.from(grouped.values())
+            .map((stats): SharedQuestionFeedbackSummary => {
                 const uniqueClients = stats.clientIds.size;
                 return {
-                    questionId,
+                    questionId: stats.questionId,
+                    questionVersion: stats.questionVersion,
                     totalFlags: stats.totalFlags,
                     uniqueClients,
                     reasonCounts: stats.reasonCounts,
@@ -184,7 +179,7 @@ export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary
 
         return {
             totalFlags: rows.length,
-            uniqueQuestions: questionIds.size,
+            uniqueQuestions: questionVersionKeys.size,
             uniqueClients: clientIds.size,
             reasonCounts,
             questions,
