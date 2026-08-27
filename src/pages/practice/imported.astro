@@ -1,0 +1,168 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout title="Imported Curriculum Practice | Aaron Holmes">
+    <main class="container">
+        <div class="practice-links">
+            <a href="/import">← Import curriculum</a>
+            <a href="/practice">Main practice</a>
+            <a href="/progress">View progress</a>
+        </div>
+        <h1>Imported curriculum practice</h1>
+        <section id="curriculum-info" class="progress-summary"><p>Loading saved curriculum…</p></section>
+        <section id="runtime-question" class="progress-summary"></section>
+        <div id="runtime-actions" class="practice-actions" hidden>
+            <button id="runtime-next" class="new-session-button" type="button">Next question</button>
+        </div>
+        <section id="runtime-complete" class="practice-complete" hidden>
+            <h2>Session complete</h2>
+            <p>Final score: <strong id="runtime-score">0</strong> / <strong id="runtime-total">0</strong></p>
+            <a class="new-session-button" href="/practice/imported">New session</a>
+        </section>
+    </main>
+</Layout>
+
+<script>
+    import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
+    import { savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
+
+    const info = document.querySelector<HTMLElement>("#curriculum-info");
+    const host = document.querySelector<HTMLElement>("#runtime-question");
+    const actions = document.querySelector<HTMLElement>("#runtime-actions");
+    const next = document.querySelector<HTMLButtonElement>("#runtime-next");
+    const complete = document.querySelector<HTMLElement>("#runtime-complete");
+    const finalScore = document.querySelector<HTMLElement>("#runtime-score");
+    const finalTotal = document.querySelector<HTMLElement>("#runtime-total");
+
+    const stored = readImportedCurriculum();
+    const questions = readImportedQuestions();
+    const sessionId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
+    let current = 0;
+    let score = 0;
+    let answered = false;
+
+    const setInfo = (titleText: string, bodyText: string) => {
+        if (!info) return;
+        const title = document.createElement("h2");
+        title.textContent = titleText;
+        const body = document.createElement("p");
+        body.textContent = bodyText;
+        info.replaceChildren(title, body);
+    };
+
+    const renderQuestion = () => {
+        if (!host) return;
+        answered = false;
+        if (actions) actions.hidden = true;
+        const question = questions[current];
+        const meta = document.createElement("p");
+        meta.textContent = `Question ${current + 1} of ${questions.length} · Score ${score}/${current}`;
+        const heading = document.createElement("h2");
+        heading.textContent = question.prompt;
+        const answerList = document.createElement("div");
+        answerList.className = "answers";
+        const review = document.createElement("div");
+        review.className = "review";
+        review.hidden = true;
+
+        question.answers.forEach((answer) => {
+            const label = document.createElement("label");
+            label.className = "answer-option";
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = `runtime-${question.id}`;
+            input.value = answer.id;
+            const text = document.createElement("span");
+            text.textContent = answer.text;
+            label.append(input, text);
+            answerList.append(label);
+
+            input.addEventListener("change", () => {
+                if (answered) return;
+                answered = true;
+                const correct = answer.correct;
+                if (correct) score += 1;
+                label.dataset.result = correct ? "correct" : "incorrect";
+                const correctAnswer = question.answers.find((item) => item.correct);
+                answerList.querySelectorAll<HTMLInputElement>("input").forEach((item) => {
+                    item.disabled = true;
+                    if (!correct && correctAnswer && item.value === correctAnswer.id) {
+                        item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct");
+                    }
+                });
+
+                const result = document.createElement("p");
+                result.textContent = correct ? "Correct." : "Not quite.";
+                review.replaceChildren(result);
+                if (!correct && correctAnswer) {
+                    const correction = document.createElement("p");
+                    const strong = document.createElement("strong");
+                    strong.textContent = "Correct answer: ";
+                    correction.append(strong, document.createTextNode(correctAnswer.text));
+                    review.append(correction);
+                }
+                const explanationText = question.explanation || answer.feedback;
+                if (explanationText) {
+                    const explanation = document.createElement("p");
+                    explanation.textContent = explanationText;
+                    review.append(explanation);
+                }
+                review.hidden = false;
+
+                savePracticeAttempt({
+                    questionId: question.id,
+                    answerId: answer.id,
+                    correct,
+                    answeredAt: new Date().toISOString(),
+                    sessionId,
+                    ...(question.topic && { topic: question.topic }),
+                    ...(question.concepts?.length && { concepts: question.concepts }),
+                    ...(question.masteryConcept && { masteryConcept: question.masteryConcept }),
+                    ...(question.difficulty && { difficulty: question.difficulty }),
+                    ...(question.learningStage && { learningStage: question.learningStage }),
+                });
+                if (actions) actions.hidden = false;
+                if (next) next.textContent = current === questions.length - 1 ? "Finish session" : "Next question";
+            });
+        });
+
+        host.replaceChildren(meta, heading, answerList, review);
+    };
+
+    if (!stored) {
+        setInfo("No imported curriculum", "Save a valid curriculum package from the importer first.");
+        if (host) host.textContent = "Nothing to practice yet.";
+    } else if (!questions.length) {
+        setInfo(stored.curriculum.title, "This curriculum has no approved question drafts yet.");
+        if (host) host.textContent = "Approve at least one draft before practicing.";
+    } else {
+        setInfo(stored.curriculum.title, `${questions.length} approved question${questions.length === 1 ? "" : "s"} loaded from this browser.`);
+        renderQuestion();
+    }
+
+    next?.addEventListener("click", () => {
+        if (!answered) return;
+        if (current === questions.length - 1) {
+            if (host) host.replaceChildren();
+            if (actions) actions.hidden = true;
+            if (complete) complete.hidden = false;
+            if (finalScore) finalScore.textContent = String(score);
+            if (finalTotal) finalTotal.textContent = String(questions.length);
+            saveSessionSummary({
+                id: sessionId,
+                mode: "imported-curriculum",
+                requestedLength: "all",
+                startedAt,
+                completedAt: new Date().toISOString(),
+                questionCount: questions.length,
+                answeredCount: questions.length,
+                correctCount: score,
+            });
+            return;
+        }
+        current += 1;
+        renderQuestion();
+    });
+</script>
