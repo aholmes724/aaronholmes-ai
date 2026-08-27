@@ -84,6 +84,9 @@
                 const feedback = saveQuestionFeedback({
                     questionId: quiz.dataset.questionId ?? "unknown",
                     questionVersion,
+                    ...(quiz.dataset.semanticKey && {
+                        semanticKey: quiz.dataset.semanticKey,
+                    }),
                     ...(reasonValue && {
                         reason: reasonValue as QuestionFeedbackReason,
                     }),
