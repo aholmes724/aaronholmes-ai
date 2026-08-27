@@ -6,6 +6,7 @@ create table if not exists public.question_feedback (
     client_id uuid not null,
     question_id text not null,
     question_version integer not null default 1,
+    semantic_key text,
     reason text not null default 'bare',
     topic text,
     mastery_concept text,
@@ -26,15 +27,26 @@ create table if not exists public.question_feedback (
     )
 );
 
--- Migration for projects that created the table before question versioning.
+-- Migrations for projects created before question versioning / semantic grouping.
 alter table public.question_feedback
     add column if not exists question_version integer not null default 1;
+
+alter table public.question_feedback
+    add column if not exists semantic_key text;
 
 alter table public.question_feedback
     drop constraint if exists question_feedback_client_question_reason_unique;
 
 create unique index if not exists question_feedback_client_question_version_reason_unique
     on public.question_feedback (client_id, question_id, question_version, reason);
+
+-- semantic_key is intentionally not unique. It groups related question variants
+-- while exact identity remains question_id + question_version. A later vector
+-- embedding layer can discover broader semantic similarity without changing the
+-- audit trail or merging distinct questions.
+create index if not exists question_feedback_semantic_key_idx
+    on public.question_feedback (semantic_key)
+    where semantic_key is not null;
 
 alter table public.question_feedback enable row level security;
 
