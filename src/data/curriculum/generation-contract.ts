@@ -15,13 +15,16 @@ export interface QuestionGenerationResult {
 }
 
 export const DEFAULT_QUESTION_QUALITY_GUIDANCE = [
+    "Questions must stand alone as subject-matter questions; never ask what the curriculum, lesson, source, module, heading, or learning objective says unless that structure is itself the subject being taught.",
+    "Keep source provenance in metadata and evidence, not in learner-facing question wording.",
     "Use plausible distractors that could be chosen by a learner with partial understanding or a realistic misconception.",
-    "Do not use obviously unrelated concepts merely to fill distractor slots.",
-    "Before returning a question, ask whether a competent test-taker who does not know the material could infer the answer from wording, grammar, specificity, qualifier words, or answer length; if so, rewrite the answer set.",
+    "Prefer distractors that differ from the correct answer in one meaningful technical distinction rather than unrelated vocabulary categories.",
+    "Before returning a question, perform a test-wise attack: try to infer the answer from wording, grammar, specificity, qualifier words, answer length, or one option sounding uniquely professional; if that works, rewrite the answer set.",
     "Do not make the correct answer uniquely nuanced while distractors are categorical, simplistic, or absurd.",
     "Use absolute qualifiers such as always, never, only, every, guaranteed, must, and cannot sparingly and only when technically necessary; do not let qualifier asymmetry reveal the answer.",
     "Keep answer choices reasonably parallel in grammatical form, specificity, and length.",
     "Prefer application, diagnosis, comparison, and transfer over recognition of memorized wording, while retaining a small number of foundational recognition questions where useful.",
+    "Where possible, combine related concepts in realistic scenarios so the learner must reason across concepts rather than match vocabulary.",
     "Avoid several questions that are merely paraphrases of the same distinction; vary the reasoning task across a concept.",
     "Ground the correct answer and explanation in the supplied curriculum rather than silently adding model knowledge.",
     "For every draft, return sourceEvidence with sourceId, a human-readable reference, and the smallest excerpt that actually supports the correct answer.",
