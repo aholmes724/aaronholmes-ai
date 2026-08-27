@@ -39,6 +39,8 @@ export type DraftValidationStatus =
 
 export interface CurriculumQuestionDraft {
     id: string;
+    version?: number;
+    semanticKey?: string;
     type: Question["type"];
     prompt: string;
     answers: Question["answers"];
