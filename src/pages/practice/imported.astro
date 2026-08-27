@@ -31,8 +31,14 @@ import Layout from "../../layouts/Layout.astro";
 <script>
     import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
     import { savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
-    import { saveQuestionFeedback, QUESTION_FEEDBACK_REASONS, type QuestionFeedbackReason } from "../../data/question-feedback";
-    import { syncQuestionFeedback } from "../../data/shared-feedback";
+    import {
+        removeQuestionFeedback,
+        saveQuestionFeedback,
+        QUESTION_FEEDBACK_REASONS,
+        type QuestionFeedback,
+        type QuestionFeedbackReason,
+    } from "../../data/question-feedback";
+    import { syncQuestionFeedback, unsyncQuestionFeedback } from "../../data/shared-feedback";
 
     const info = document.querySelector<HTMLElement>("#curriculum-info");
     const host = document.querySelector<HTMLElement>("#runtime-question");
@@ -100,8 +106,20 @@ import Layout from "../../layouts/Layout.astro";
         flag.textContent = "Flag question";
         const confirmation = document.createElement("span");
         confirmation.setAttribute("aria-live", "polite");
+        let activeFeedback: QuestionFeedback | null = null;
 
         flag.addEventListener("click", async () => {
+            if (activeFeedback) {
+                const removing = activeFeedback;
+                removeQuestionFeedback(removing);
+                activeFeedback = null;
+                flag.textContent = "Flag question";
+                reason.disabled = false;
+                confirmation.textContent = " Flag removed.";
+                await unsyncQuestionFeedback(removing);
+                return;
+            }
+
             const selectedReason = reason.value as QuestionFeedbackReason | "";
             const saved = saveQuestionFeedback({
                 questionId: question.id,
@@ -113,7 +131,9 @@ import Layout from "../../layouts/Layout.astro";
                 ...(question.learningObjective ? { learningObjective: question.learningObjective } : {}),
                 ...(question.learningStage ? { learningStage: question.learningStage } : {}),
             });
-            flag.disabled = true;
+            activeFeedback = saved;
+            flag.textContent = "Remove flag";
+            reason.disabled = true;
             confirmation.textContent = " Flagged.";
             await syncQuestionFeedback(saved);
         });
