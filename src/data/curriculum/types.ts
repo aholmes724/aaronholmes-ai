@@ -6,6 +6,7 @@ export type CurriculumSourceKind =
     | "article"
     | "notes"
     | "course"
+    | "video"
     | "other";
 
 export interface CurriculumSource {
@@ -31,6 +32,21 @@ export interface CurriculumLearningObjective {
     learningStage: NonNullable<Question["learningStage"]>;
 }
 
+export interface SourceEvidence {
+    sourceId: string;
+    reference: string;
+    excerpt: string;
+    locator?: string;
+}
+
+export interface SupplementalLearningResource {
+    title: string;
+    url: string;
+    kind: "article" | "book" | "course" | "video" | "documentation" | "other";
+    provider?: string;
+    note?: string;
+}
+
 export type DraftValidationStatus =
     | "draft"
     | "reviewed"
@@ -53,6 +69,8 @@ export interface CurriculumQuestionDraft {
     explanation: string;
     sourceId: string;
     sourceReference: string;
+    sourceEvidence?: SourceEvidence;
+    supplementalResources?: SupplementalLearningResource[];
     shuffleAnswers?: boolean;
     validationStatus: DraftValidationStatus;
 }
