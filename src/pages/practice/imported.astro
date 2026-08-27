@@ -6,6 +6,7 @@ import Layout from "../../layouts/Layout.astro";
     <main class="container">
         <div class="practice-links">
             <a href="/import">← Import curriculum</a>
+            <a href="/curriculum-review">Review or edit questions</a>
             <a href="/practice">Main practice</a>
             <a href="/progress">View progress</a>
         </div>
@@ -18,7 +19,11 @@ import Layout from "../../layouts/Layout.astro";
         <section id="runtime-complete" class="practice-complete" hidden>
             <h2>Session complete</h2>
             <p>Final score: <strong id="runtime-score">0</strong> / <strong id="runtime-total">0</strong></p>
-            <a class="new-session-button" href="/practice/imported">New session</a>
+            <div class="progress-actions">
+                <a class="new-session-button" href="/practice/imported">New session</a>
+                <a class="secondary-button" href="/curriculum-review">Review or edit questions</a>
+                <a class="secondary-button" href="/progress">View progress</a>
+            </div>
         </section>
     </main>
 </Layout>
