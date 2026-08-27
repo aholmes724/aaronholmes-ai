@@ -75,9 +75,15 @@
                 const data = new FormData(form);
                 const reasonValue = data.get("reason")?.toString().trim();
                 const note = data.get("note")?.toString().trim();
+                const parsedVersion = Number(quiz.dataset.questionVersion ?? "1");
+                const questionVersion =
+                    Number.isInteger(parsedVersion) && parsedVersion > 0
+                        ? parsedVersion
+                        : 1;
 
                 const feedback = saveQuestionFeedback({
                     questionId: quiz.dataset.questionId ?? "unknown",
+                    questionVersion,
                     ...(reasonValue && {
                         reason: reasonValue as QuestionFeedbackReason,
                     }),
@@ -96,9 +102,6 @@
                     }),
                 });
 
-                // Local save is the source of truth for immediate UX. Remote sync
-                // is best-effort and only activates when Supabase env vars exist.
-                // Free-text notes are intentionally not included in the shared store.
                 void syncQuestionFeedback(feedback);
 
                 form.reset();
