@@ -18,7 +18,11 @@ export const DEFAULT_QUESTION_QUALITY_GUIDANCE = [
     "Do not make the correct answer uniquely nuanced while distractors are simplistic or absurd.",
     "Use absolute qualifiers such as always, never, only, every, and guaranteed sparingly and only when technically necessary.",
     "Test understanding and application, not just recognition of memorized wording.",
-    "Keep every question grounded in the supplied curriculum source and preserve source provenance.",
+    "Ground the correct answer and explanation in the supplied curriculum rather than silently adding model knowledge.",
+    "For every draft, return sourceEvidence with sourceId, a human-readable reference, and the smallest excerpt that actually supports the correct answer.",
+    "Reject or omit a question when the supplied source does not contain enough evidence to defend one answer over the distractors.",
+    "Treat source provenance as inspectable metadata: keep practice uncluttered, but make the evidence available on demand after answering.",
+    "Supplemental resources are optional enrichment, never evidence for a curriculum-grounded answer; label them separately from the learner's source material.",
 ];
 
 export function createQuestionGenerationRequest(
