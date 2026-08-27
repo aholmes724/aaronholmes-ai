@@ -77,5 +77,15 @@ to anon
 using (true)
 with check (true);
 
-grant select, insert, update on public.question_feedback to anon;
+-- Reversible flagging needs delete permission. The client issues a narrowly
+-- filtered delete for its own generated client_id + question/version/reason.
+-- client_id is anonymous browser state, not an account identifier.
+drop policy if exists "allow anonymous feedback deletes" on public.question_feedback;
+create policy "allow anonymous feedback deletes"
+on public.question_feedback
+for delete
+to anon
+using (true);
+
+grant select, insert, update, delete on public.question_feedback to anon;
 grant usage, select on sequence public.question_feedback_id_seq to anon;
