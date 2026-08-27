@@ -24,18 +24,22 @@ import Layout from "../layouts/Layout.astro";
 </Layout>
 
 <script>
+    import type { CurriculumPackage } from "../data/curriculum/types";
     import { parseCurriculumJson, summarizeCurriculum } from "../data/curriculum/importer";
     import { sampleCurriculum } from "../data/curriculum/sample";
+    import { saveImportedCurriculum } from "../data/curriculum/storage";
 
     const input = document.querySelector<HTMLInputElement>("#curriculum-file");
     const sampleButton = document.querySelector<HTMLButtonElement>("#load-sample");
     const result = document.querySelector<HTMLElement>("#import-result");
+    let pendingCurriculum: CurriculumPackage | null = null;
 
     const render = (raw: string) => {
         if (!result) return;
         const imported = parseCurriculumJson(raw);
         const heading = document.createElement("h2");
         heading.textContent = "Import check";
+        pendingCurriculum = null;
 
         if (!imported.ok || !imported.curriculum) {
             const intro = document.createElement("p");
@@ -51,6 +55,7 @@ import Layout from "../layouts/Layout.astro";
         }
 
         const curriculum = imported.curriculum;
+        pendingCurriculum = curriculum;
         const stats = summarizeCurriculum(curriculum);
         const title = document.createElement("p");
         title.innerHTML = `<strong>${curriculum.title}</strong> · version ${curriculum.version}`;
@@ -69,9 +74,29 @@ import Layout from "../layouts/Layout.astro";
             wrapper.append(dt, dd);
             dl.append(wrapper);
         });
+
         const note = document.createElement("p");
-        note.textContent = "Valid package. The next stage can persist it and compile approved drafts into practice questions.";
-        result.replaceChildren(heading, title, dl, note);
+        note.textContent = "Valid package. Save it to make approved drafts available for imported-curriculum practice.";
+        const actions = document.createElement("div");
+        actions.className = "progress-actions";
+        const save = document.createElement("button");
+        save.className = "new-session-button";
+        save.type = "button";
+        save.textContent = "Save curriculum";
+        save.addEventListener("click", () => {
+            if (!pendingCurriculum) return;
+            saveImportedCurriculum(pendingCurriculum);
+            const confirmation = document.createElement("p");
+            confirmation.textContent = "Saved in this browser. Approved questions are ready for practice.";
+            const practiceLink = document.createElement("a");
+            practiceLink.className = "new-session-button";
+            practiceLink.href = "/practice/imported";
+            practiceLink.textContent = "Practice this curriculum";
+            actions.replaceChildren(practiceLink);
+            note.replaceWith(confirmation);
+        });
+        actions.append(save);
+        result.replaceChildren(heading, title, dl, note, actions);
     };
 
     input?.addEventListener("change", async () => {
