@@ -67,7 +67,6 @@ export function validateGeneratedDrafts(
             });
         }
 
-        const answerLengths = draft.answers.map((answer) => answer.text.trim().length).filter(Boolean);
         const correctLength = correctAnswers[0]?.text.trim().length ?? 0;
         const averageWrongLength = (() => {
             const wrong = draft.answers.filter((answer) => !answer.correct).map((answer) => answer.text.trim().length);
