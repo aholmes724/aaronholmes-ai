@@ -1,8 +1,8 @@
-import type { CurriculumPackage, CurriculumQuestionDraft } from "./types";
+import type { CurriculumPackage, CurriculumQuestionDraft, QuestionQualityWarning } from "./types";
 import { validateCurriculumPackage } from "./validate";
 
-export const GENERATION_HARNESS_VERSION = "1.0.0";
-export const GENERATION_PROMPT_VERSION = "2026-08-26.1";
+export const GENERATION_HARNESS_VERSION = "1.3.0";
+export const GENERATION_PROMPT_VERSION = "2026-08-27.1";
 
 export interface HarnessIssue {
     questionId?: string;
@@ -17,7 +17,11 @@ export interface HarnessResult {
     issues: HarnessIssue[];
 }
 
-const giveawayQualifier = /\b(always|never|only|every|guaranteed|obviously|clearly)\b/i;
+const giveawayQualifier = /\b(always|never|only|every|guaranteed|obviously|clearly|must|cannot)\b/i;
+
+function warning(code: string, message: string): QuestionQualityWarning {
+    return { code, message };
+}
 
 export function validateGeneratedDrafts(
     curriculum: CurriculumPackage,
@@ -29,7 +33,9 @@ export function validateGeneratedDrafts(
 
     for (const draft of drafts) {
         const draftIssues: HarnessIssue[] = [];
+        const qualityWarnings: QuestionQualityWarning[] = [];
         const correctAnswers = draft.answers.filter((answer) => answer.correct);
+        const wrongAnswers = draft.answers.filter((answer) => !answer.correct);
 
         if (!draft.sourceEvidence?.excerpt?.trim()) {
             draftIssues.push({
@@ -68,33 +74,56 @@ export function validateGeneratedDrafts(
         }
 
         const correctLength = correctAnswers[0]?.text.trim().length ?? 0;
-        const averageWrongLength = (() => {
-            const wrong = draft.answers.filter((answer) => !answer.correct).map((answer) => answer.text.trim().length);
-            return wrong.length ? wrong.reduce((sum, length) => sum + length, 0) / wrong.length : 0;
-        })();
+        const averageWrongLength = wrongAnswers.length
+            ? wrongAnswers.reduce((sum, answer) => sum + answer.text.trim().length, 0) / wrongAnswers.length
+            : 0;
 
-        if (averageWrongLength > 0 && correctLength > averageWrongLength * 1.8 && correctLength - averageWrongLength > 28) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "warning",
-                code: "correct-answer-length-cue",
-                message: "The correct answer is substantially more detailed than the distractors.",
-            });
+        if (averageWrongLength > 0 && correctLength > averageWrongLength * 1.65 && correctLength - averageWrongLength > 22) {
+            const item = warning(
+                "correct-answer-length-cue",
+                "The correct answer is substantially more detailed than the distractors and may be guessable by answer length.",
+            );
+            qualityWarnings.push(item);
+            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
         }
 
-        const qualifierWrongAnswers = draft.answers.filter(
-            (answer) => !answer.correct && giveawayQualifier.test(answer.text),
-        ).length;
-        const qualifierCorrectAnswers = draft.answers.filter(
-            (answer) => answer.correct && giveawayQualifier.test(answer.text),
-        ).length;
+        const qualifierWrongAnswers = wrongAnswers.filter((answer) => giveawayQualifier.test(answer.text)).length;
+        const qualifierCorrectAnswers = correctAnswers.filter((answer) => giveawayQualifier.test(answer.text)).length;
         if (qualifierWrongAnswers >= 2 && qualifierCorrectAnswers === 0) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "warning",
-                code: "giveaway-qualifiers",
-                message: "Multiple distractors use giveaway absolute qualifiers while the correct answer does not.",
-            });
+            const item = warning(
+                "qualifier-asymmetry",
+                "Multiple distractors use absolute or categorical qualifiers while the correct answer is more nuanced; a test-wise learner may infer the answer without knowing the material.",
+            );
+            qualityWarnings.push(item);
+            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+        } else if (qualifierWrongAnswers === wrongAnswers.length && wrongAnswers.length >= 3 && qualifierCorrectAnswers === 0) {
+            const item = warning(
+                "all-distractors-categorical",
+                "Every distractor is categorically worded while the correct answer is qualified, creating a strong test-taking cue.",
+            );
+            qualityWarnings.push(item);
+            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+        }
+
+        const answerWordCounts = draft.answers.map((answer) => answer.text.trim().split(/\s+/).filter(Boolean).length);
+        const minWords = Math.min(...answerWordCounts);
+        const maxWords = Math.max(...answerWordCounts);
+        if (maxWords >= Math.max(8, minWords * 3) && correctLength === Math.max(...draft.answers.map((answer) => answer.text.trim().length))) {
+            const item = warning(
+                "answer-shape-asymmetry",
+                "The correct option has a noticeably different shape or level of detail from the alternatives.",
+            );
+            qualityWarnings.push(item);
+            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+        }
+
+        if (draft.learningStage === "recognition" && draft.difficulty !== "beginner") {
+            const item = warning(
+                "recognition-difficulty-mismatch",
+                "This question is labeled above beginner difficulty but still tests recognition; consider a scenario, diagnosis, or transfer task instead.",
+            );
+            qualityWarnings.push(item);
+            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
         }
 
         if (!draft.explanation?.trim() || draft.explanation.trim().length < 30) {
@@ -107,8 +136,14 @@ export function validateGeneratedDrafts(
         }
 
         issues.push(...draftIssues);
-        if (draftIssues.some((issue) => issue.severity === "error")) rejected.push(draft);
-        else accepted.push(draft);
+        if (draftIssues.some((issue) => issue.severity === "error")) {
+            rejected.push(draft);
+        } else {
+            accepted.push({
+                ...draft,
+                qualityWarnings: qualityWarnings.length ? qualityWarnings : undefined,
+            });
+        }
     }
 
     const candidate: CurriculumPackage = {
