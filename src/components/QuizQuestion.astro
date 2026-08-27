@@ -13,12 +13,21 @@ const learningObjective = getLearningObjective(
     question.id,
     question.learningObjective,
 );
+const semanticKey =
+    question.semanticKey ??
+    [question.masteryConcept, learningObjective]
+        .filter(Boolean)
+        .join("::")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
 ---
 
 <section
     class="quiz-question"
     data-question-id={question.id}
     data-question-version={question.version ?? 1}
+    data-semantic-key={semanticKey || undefined}
     data-topic={question.topic}
     data-concepts={question.concepts?.join(",")}
     data-difficulty={question.difficulty}
