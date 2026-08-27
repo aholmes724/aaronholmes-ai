@@ -4,15 +4,16 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="Review Questions | Aaron Holmes">
   <main class="container">
-    <div class="practice-links"><a href="/import">← Import</a><a href="/practice">Practice</a></div>
-    <h1>Review generated questions</h1>
-    <p>AI-generated questions stay in draft until an educator or author approves them. Inspect the answer, explanation, and source evidence before publishing.</p>
+    <div class="practice-links"><a href="/import">← Import</a><a href="/practice/imported">Practice curriculum</a></div>
+    <h1>Review or edit questions</h1>
+    <p>This is an optional authoring layer. Questions that passed the AI harness are already usable for normal practice; educators and authors can inspect, edit, reject, or add questions at their discretion.</p>
 
     <section id="review-summary" class="progress-summary" aria-live="polite">
-      <h2>Review queue</h2>
+      <h2>Question set</h2>
       <p>Loading saved curriculum…</p>
     </section>
 
+    <section id="authoring-panel"></section>
     <section id="review-list"></section>
   </main>
 </Layout>
@@ -22,19 +23,132 @@ import Layout from "../layouts/Layout.astro";
   import type { CurriculumPackage, CurriculumQuestionDraft, DraftValidationStatus } from "../data/curriculum/types";
 
   const summary = document.querySelector<HTMLElement>("#review-summary");
+  const authoringPanel = document.querySelector<HTMLElement>("#authoring-panel");
   const list = document.querySelector<HTMLElement>("#review-list");
   let curriculum: CurriculumPackage | null = null;
 
-  const statusLabel = (status: DraftValidationStatus) => ({ draft: "Draft", reviewed: "Reviewed", approved: "Approved", rejected: "Rejected" }[status]);
+  const statusLabel = (status: DraftValidationStatus) => ({
+    draft: "Draft",
+    "ai-validated": "AI validated",
+    reviewed: "Reviewed",
+    approved: "Human approved",
+    rejected: "Rejected",
+  }[status]);
+
+  const isPracticeReady = (draft: CurriculumQuestionDraft) =>
+    draft.validationStatus === "ai-validated" || draft.validationStatus === "approved";
+
+  function persist() {
+    if (!curriculum) return;
+    saveImportedCurriculum(curriculum);
+  }
 
   function saveStatus(questionId: string, status: DraftValidationStatus) {
     if (!curriculum) return;
     curriculum = {
       ...curriculum,
-      questionDrafts: curriculum.questionDrafts.map((draft) => draft.id === questionId ? { ...draft, validationStatus: status } : draft),
+      questionDrafts: curriculum.questionDrafts.map((draft) =>
+        draft.id === questionId ? { ...draft, validationStatus: status } : draft,
+      ),
     };
-    saveImportedCurriculum(curriculum);
+    persist();
     render();
+  }
+
+  function editQuestion(draft: CurriculumQuestionDraft, card: HTMLElement) {
+    if (!curriculum) return;
+    const form = document.createElement("form");
+    form.className = "progress-summary";
+
+    const promptLabel = document.createElement("label");
+    promptLabel.textContent = "Question";
+    const prompt = document.createElement("textarea");
+    prompt.rows = 3;
+    prompt.value = draft.prompt;
+    prompt.required = true;
+    promptLabel.append(document.createElement("br"), prompt);
+
+    const explanationLabel = document.createElement("label");
+    explanationLabel.textContent = "Explanation";
+    const explanation = document.createElement("textarea");
+    explanation.rows = 4;
+    explanation.value = draft.explanation;
+    explanation.required = true;
+    explanationLabel.append(document.createElement("br"), explanation);
+
+    const answersHeading = document.createElement("h3");
+    answersHeading.textContent = "Answers";
+    const answerInputs = draft.answers.map((answer, index) => {
+      const row = document.createElement("p");
+      const correct = document.createElement("input");
+      correct.type = "radio";
+      correct.name = `correct-${draft.id}`;
+      correct.checked = answer.correct;
+      const text = document.createElement("input");
+      text.type = "text";
+      text.value = answer.text;
+      text.required = true;
+      text.style.width = "80%";
+      row.append(correct, document.createTextNode(" Correct  "), text);
+      form.append(row);
+      return { answer, correct, text, index };
+    });
+
+    const evidenceLabel = document.createElement("label");
+    evidenceLabel.textContent = "Supporting source excerpt";
+    const evidence = document.createElement("textarea");
+    evidence.rows = 3;
+    evidence.value = draft.sourceEvidence?.excerpt ?? "";
+    evidenceLabel.append(document.createElement("br"), evidence);
+
+    const actions = document.createElement("div");
+    actions.className = "progress-actions";
+    const save = document.createElement("button");
+    save.className = "new-session-button";
+    save.type = "submit";
+    save.textContent = "Save human edit";
+    const cancel = document.createElement("button");
+    cancel.className = "secondary-button";
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => render());
+    actions.append(save, cancel);
+
+    form.prepend(promptLabel, explanationLabel, answersHeading);
+    form.append(evidenceLabel, actions);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!curriculum) return;
+      const correctIndex = answerInputs.findIndex((item) => item.correct.checked);
+      if (correctIndex < 0) return;
+
+      const updated: CurriculumQuestionDraft = {
+        ...draft,
+        prompt: prompt.value.trim(),
+        explanation: explanation.value.trim(),
+        answers: answerInputs.map((item, index) => ({
+          ...item.answer,
+          text: item.text.value.trim(),
+          correct: index === correctIndex,
+        })),
+        sourceEvidence: draft.sourceEvidence ? {
+          ...draft.sourceEvidence,
+          excerpt: evidence.value.trim() || draft.sourceEvidence.excerpt,
+        } : undefined,
+        version: (draft.version ?? 1) + 1,
+        authorship: "human-edited",
+        validationStatus: "approved",
+      };
+
+      curriculum = {
+        ...curriculum,
+        questionDrafts: curriculum.questionDrafts.map((item) => item.id === draft.id ? updated : item),
+      };
+      persist();
+      render();
+    });
+
+    card.replaceChildren(form);
   }
 
   function renderQuestion(draft: CurriculumQuestionDraft, index: number) {
@@ -46,7 +160,8 @@ import Layout from "../layouts/Layout.astro";
 
     const meta = document.createElement("p");
     const tier = draft.generation?.verificationTier === "high-assurance" ? "High assurance" : "Classroom grounded";
-    meta.textContent = `${statusLabel(draft.validationStatus)} · ${tier} · ${draft.learningStage} · ${draft.difficulty}`;
+    const author = draft.authorship === "human-authored" ? "Human authored" : draft.authorship === "human-edited" ? "Human edited" : "AI generated";
+    meta.textContent = `${statusLabel(draft.validationStatus)} · ${author} · ${tier} · ${draft.learningStage} · ${draft.difficulty}`;
 
     const answers = document.createElement("ul");
     draft.answers.forEach((answer) => {
@@ -57,7 +172,9 @@ import Layout from "../layouts/Layout.astro";
     });
 
     const explanation = document.createElement("p");
-    explanation.innerHTML = `<strong>Explanation:</strong> ${draft.explanation}`;
+    const explanationStrong = document.createElement("strong");
+    explanationStrong.textContent = "Explanation: ";
+    explanation.append(explanationStrong, document.createTextNode(draft.explanation));
 
     const evidence = document.createElement("details");
     const evidenceSummary = document.createElement("summary");
@@ -65,7 +182,10 @@ import Layout from "../layouts/Layout.astro";
     const evidenceBody = document.createElement("div");
     evidenceBody.className = "progress-summary";
     const reference = document.createElement("p");
-    reference.innerHTML = `<strong>${draft.sourceEvidence?.reference || draft.sourceReference}</strong>${draft.sourceEvidence?.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`;
+    const referenceStrong = document.createElement("strong");
+    referenceStrong.textContent = draft.sourceEvidence?.reference || draft.sourceReference;
+    reference.append(referenceStrong);
+    if (draft.sourceEvidence?.locator) reference.append(document.createTextNode(` · ${draft.sourceEvidence.locator}`));
     const excerpt = document.createElement("blockquote");
     excerpt.textContent = draft.sourceEvidence?.excerpt || "No evidence excerpt was supplied.";
     evidenceBody.append(reference, excerpt);
@@ -76,57 +196,195 @@ import Layout from "../layouts/Layout.astro";
     const approve = document.createElement("button");
     approve.type = "button";
     approve.className = "new-session-button";
-    approve.textContent = "Approve";
+    approve.textContent = draft.validationStatus === "approved" ? "Human approved" : "Mark human approved";
+    approve.disabled = draft.validationStatus === "approved";
     approve.addEventListener("click", () => saveStatus(draft.id, "approved"));
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary-button";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", () => editQuestion(draft, card));
+
     const reject = document.createElement("button");
     reject.type = "button";
     reject.className = "secondary-button";
-    reject.textContent = "Reject";
+    reject.textContent = draft.validationStatus === "rejected" ? "Rejected" : "Reject from practice";
+    reject.disabled = draft.validationStatus === "rejected";
     reject.addEventListener("click", () => saveStatus(draft.id, "rejected"));
-    controls.append(approve, reject);
+    controls.append(approve, edit, reject);
 
     card.append(title, meta, answers, explanation, evidence, controls);
     return card;
   }
 
+  function renderNewQuestionForm() {
+    if (!authoringPanel || !curriculum) return;
+    authoringPanel.replaceChildren();
+
+    const wrapper = document.createElement("section");
+    wrapper.className = "progress-summary";
+    const heading = document.createElement("h2");
+    heading.textContent = "Add a human-authored question";
+    const form = document.createElement("form");
+
+    const prompt = document.createElement("textarea");
+    prompt.rows = 3;
+    prompt.placeholder = "Question prompt";
+    prompt.required = true;
+    const explanation = document.createElement("textarea");
+    explanation.rows = 4;
+    explanation.placeholder = "Explanation";
+    explanation.required = true;
+
+    const concept = document.createElement("select");
+    curriculum.concepts.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.label;
+      concept.append(option);
+    });
+    const objective = document.createElement("select");
+    curriculum.learningObjectives.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.description;
+      objective.append(option);
+    });
+    const source = document.createElement("select");
+    curriculum.sources.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.title;
+      source.append(option);
+    });
+
+    const evidence = document.createElement("textarea");
+    evidence.rows = 3;
+    evidence.placeholder = "Supporting source excerpt (recommended)";
+
+    const answerRows: Array<{ text: HTMLInputElement; correct: HTMLInputElement }> = [];
+    for (let i = 0; i < 4; i += 1) {
+      const row = document.createElement("p");
+      const correct = document.createElement("input");
+      correct.type = "radio";
+      correct.name = "new-correct-answer";
+      if (i === 0) correct.checked = true;
+      const text = document.createElement("input");
+      text.type = "text";
+      text.placeholder = `Answer ${i + 1}`;
+      text.required = true;
+      text.style.width = "80%";
+      row.append(correct, document.createTextNode(" Correct  "), text);
+      form.append(row);
+      answerRows.push({ text, correct });
+    }
+
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "new-session-button";
+    save.textContent = "Add question";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "secondary-button";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => authoringPanel.replaceChildren());
+
+    form.prepend(
+      document.createTextNode("Question"), document.createElement("br"), prompt,
+      document.createElement("br"), document.createTextNode("Explanation"), document.createElement("br"), explanation,
+      document.createElement("br"), document.createTextNode("Concept "), concept,
+      document.createElement("br"), document.createTextNode("Learning objective "), objective,
+      document.createElement("br"), document.createTextNode("Source "), source,
+      document.createElement("br"), document.createTextNode("Source evidence"), document.createElement("br"), evidence,
+      document.createElement("h3").appendChild(document.createTextNode("Answers")).parentNode as Node,
+    );
+    const actions = document.createElement("div");
+    actions.className = "progress-actions";
+    actions.append(save, cancel);
+    form.append(actions);
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!curriculum) return;
+      const correctIndex = answerRows.findIndex((item) => item.correct.checked);
+      const sourceRecord = curriculum.sources.find((item) => item.id === source.value)!;
+      const objectiveRecord = curriculum.learningObjectives.find((item) => item.id === objective.value);
+      const conceptRecord = curriculum.concepts.find((item) => item.id === concept.value);
+      const id = `human-${Date.now()}`;
+      const draft: CurriculumQuestionDraft = {
+        id,
+        version: 1,
+        semanticKey: `human:${concept.value}:${id}`,
+        type: "single-select",
+        prompt: prompt.value.trim(),
+        answers: answerRows.map((item, index) => ({
+          id: `${id}-${index + 1}`,
+          text: item.text.value.trim(),
+          correct: index === correctIndex,
+          feedback: index === correctIndex ? "Correct." : "Review the explanation and source evidence.",
+        })),
+        topic: conceptRecord?.label ?? curriculum.title,
+        conceptIds: [concept.value],
+        masteryConcept: concept.value,
+        learningObjectiveId: objective.value,
+        difficulty: "intermediate",
+        learningStage: objectiveRecord?.learningStage ?? "understanding",
+        explanation: explanation.value.trim(),
+        sourceId: source.value,
+        sourceReference: sourceRecord.title,
+        sourceEvidence: evidence.value.trim() ? {
+          sourceId: source.value,
+          reference: sourceRecord.title,
+          excerpt: evidence.value.trim(),
+        } : undefined,
+        authorship: "human-authored",
+        shuffleAnswers: true,
+        validationStatus: "approved",
+      };
+      curriculum = { ...curriculum, questionDrafts: [...curriculum.questionDrafts, draft] };
+      persist();
+      authoringPanel.replaceChildren();
+      render();
+    });
+
+    wrapper.append(heading, form);
+    authoringPanel.append(wrapper);
+  }
+
   function render() {
     if (!summary || !list) return;
     if (!curriculum) {
-      summary.innerHTML = "<h2>Review queue</h2><p>No imported curriculum is saved in this browser.</p>";
+      summary.innerHTML = "<h2>Question set</h2><p>No imported curriculum is saved in this browser.</p>";
       list.replaceChildren();
       return;
     }
 
     const drafts = curriculum.questionDrafts;
-    const approved = drafts.filter((draft) => draft.validationStatus === "approved").length;
+    const aiValidated = drafts.filter((draft) => draft.validationStatus === "ai-validated").length;
+    const humanApproved = drafts.filter((draft) => draft.validationStatus === "approved").length;
     const rejected = drafts.filter((draft) => draft.validationStatus === "rejected").length;
-    const pending = drafts.length - approved - rejected;
+    const practiceReady = drafts.filter(isPracticeReady).length;
 
     const heading = document.createElement("h2");
     heading.textContent = curriculum.title;
     const counts = document.createElement("p");
-    counts.textContent = `${drafts.length} generated · ${pending} awaiting review · ${approved} approved · ${rejected} rejected`;
+    counts.textContent = `${drafts.length} total · ${practiceReady} practice ready · ${aiValidated} AI validated · ${humanApproved} human approved · ${rejected} rejected`;
     const note = document.createElement("p");
-    note.textContent = "Classroom grounded uses the supplied curriculum as the instructional authority. High assurance is deliberately more conservative about ambiguous or weakly supported claims; it is not a substitute for independent external-source verification.";
+    note.textContent = "AI-validated questions can be used immediately. Human review changes provenance but is optional. Rejecting a question removes it from practice. Editing increments its version so earlier feedback stays attached to the old wording.";
 
     const actions = document.createElement("div");
     actions.className = "progress-actions";
-    const approveAll = document.createElement("button");
-    approveAll.type = "button";
-    approveAll.className = "secondary-button";
-    approveAll.textContent = "Approve all remaining drafts";
-    approveAll.addEventListener("click", () => {
-      if (!curriculum) return;
-      curriculum = { ...curriculum, questionDrafts: curriculum.questionDrafts.map((draft) => draft.validationStatus === "draft" ? { ...draft, validationStatus: "approved" as const } : draft) };
-      saveImportedCurriculum(curriculum);
-      render();
-    });
     const practice = document.createElement("a");
     practice.href = "/practice/imported";
     practice.className = "new-session-button";
-    practice.textContent = "Practice approved questions";
-    if (!approved) practice.setAttribute("aria-disabled", "true");
-    actions.append(approveAll, practice);
+    practice.textContent = "Practice current set";
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "secondary-button";
+    add.textContent = "Add your own question";
+    add.addEventListener("click", renderNewQuestionForm);
+    actions.append(practice, add);
 
     summary.replaceChildren(heading, counts, note, actions);
     list.replaceChildren(...drafts.map(renderQuestion));
