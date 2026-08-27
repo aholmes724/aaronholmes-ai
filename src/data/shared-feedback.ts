@@ -106,6 +106,32 @@ export async function syncQuestionFeedback(
     }
 }
 
+export async function unsyncQuestionFeedback(
+    feedback: QuestionFeedback,
+): Promise<boolean> {
+    const config = getConfig();
+    if (!config) return false;
+
+    const clientId = getClientId();
+    const reason = encodeURIComponent(feedback.reason ?? BARE_REASON);
+    const questionId = encodeURIComponent(feedback.questionId);
+    const questionVersion = feedback.questionVersion || 1;
+
+    try {
+        const response = await fetch(
+            `${config.url}/rest/v1/question_feedback?client_id=eq.${clientId}&question_id=eq.${questionId}&question_version=eq.${questionVersion}&reason=eq.${reason}`,
+            {
+                method: "DELETE",
+                headers: headersFor(config.anonKey),
+            },
+        );
+
+        return response.ok;
+    } catch {
+        return false;
+    }
+}
+
 export async function readSharedFeedbackSummary(): Promise<SharedFeedbackSummary | null> {
     const config = getConfig();
     if (!config) return null;
