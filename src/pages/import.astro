@@ -13,6 +13,13 @@ import Layout from "../layouts/Layout.astro";
             <p>Upload plain text or Markdown to create a curriculum structure, or load an existing portable JSON curriculum package.</p>
             <label for="curriculum-file"><strong>Choose .txt, .md, or curriculum .json</strong></label>
             <input id="curriculum-file" type="file" accept="text/plain,text/markdown,application/json,.txt,.md,.markdown,.json" />
+            <p><label for="verification-tier"><strong>Source verification</strong></label><br />
+                <select id="verification-tier">
+                    <option value="classroom">Classroom grounded — curriculum is the instructional authority</option>
+                    <option value="high-assurance">High assurance — reject ambiguous or weakly supported claims</option>
+                </select>
+            </p>
+            <p><small>High assurance is stricter source-grounding, not independent external fact-checking. A separate corroboration layer can be added later for environments that require it.</small></p>
             <div class="progress-actions"><button id="load-sample" class="secondary-button" type="button">Load sample package</button></div>
         </section>
 
@@ -24,7 +31,7 @@ import Layout from "../layouts/Layout.astro";
 </Layout>
 
 <script>
-    import type { CurriculumPackage } from "../data/curriculum/types";
+    import type { CurriculumPackage, VerificationTier } from "../data/curriculum/types";
     import { parseCurriculumJson, summarizeCurriculum } from "../data/curriculum/importer";
     import { sampleCurriculum } from "../data/curriculum/sample";
     import { saveImportedCurriculum } from "../data/curriculum/storage";
@@ -35,10 +42,14 @@ import Layout from "../layouts/Layout.astro";
 
     const input = document.querySelector<HTMLInputElement>("#curriculum-file");
     const sampleButton = document.querySelector<HTMLButtonElement>("#load-sample");
+    const verificationSelect = document.querySelector<HTMLSelectElement>("#verification-tier");
     const result = document.querySelector<HTMLElement>("#import-result");
     let pendingCurriculum: CurriculumPackage | null = null;
     let pendingSourceText = "";
     let pendingSourceSummary = "";
+
+    const selectedVerificationTier = (): VerificationTier =>
+        verificationSelect?.value === "high-assurance" ? "high-assurance" : "classroom";
 
     const renderPackage = (curriculum: CurriculumPackage, sourceText = "", sourceSummary?: string, generationMessage?: string) => {
         if (!result) return;
@@ -52,10 +63,7 @@ import Layout from "../layouts/Layout.astro";
         title.innerHTML = `<strong>${curriculum.title}</strong> · version ${curriculum.version}`;
         const dl = document.createElement("dl");
         dl.className = "progress-stats";
-        const entries = [
-            ["Sources", stats.sources], ["Concepts", stats.concepts], ["Objectives", stats.objectives],
-            ["Question drafts", stats.drafts], ["Approved", stats.approved],
-        ];
+        const entries = [["Sources", stats.sources], ["Concepts", stats.concepts], ["Objectives", stats.objectives], ["Question drafts", stats.drafts], ["Approved", stats.approved]];
         entries.forEach(([labelText, value]) => {
             const wrapper = document.createElement("div");
             const dt = document.createElement("dt");
@@ -68,87 +76,74 @@ import Layout from "../layouts/Layout.astro";
 
         const note = document.createElement("p");
         note.textContent = generationMessage || (stats.approved
-            ? "Grounded questions are ready. Save this curriculum to make them available for practice."
-            : "Source structure is ready. Generate grounded questions next; this package has no approved questions yet.");
+            ? "Approved questions are ready for practice."
+            : stats.drafts
+                ? "Generated questions are waiting for educator/author review before they can enter practice."
+                : "Source structure is ready. Generate grounded questions next.");
 
         const actions = document.createElement("div");
         actions.className = "progress-actions";
 
-        if (sourceText && !stats.approved) {
+        if (sourceText && !stats.drafts) {
             const generate = document.createElement("button");
             generate.className = "new-session-button";
             generate.type = "button";
-            generate.textContent = "Generate grounded questions";
+            generate.textContent = "Generate questions for review";
             generate.disabled = !isQuestionGenerationConfigured();
             if (!isQuestionGenerationConfigured()) generate.title = "Supabase generation backend is not configured.";
             generate.addEventListener("click", async () => {
                 if (!pendingCurriculum || !pendingSourceText) return;
                 generate.disabled = true;
                 generate.textContent = "Generating…";
-                note.textContent = "Generating source-grounded questions and checking them for obvious quality failures…";
+                note.textContent = "Generating source-grounded drafts and checking them for obvious quality failures…";
 
                 try {
-                    const request = createQuestionGenerationRequest(pendingCurriculum, pendingSourceText);
+                    const request = createQuestionGenerationRequest(pendingCurriculum, pendingSourceText, undefined, selectedVerificationTier());
                     const generated = await generateQuestionDrafts(request);
                     if (!generated.ok) {
-                        renderPackage(
-                            pendingCurriculum,
-                            pendingSourceText,
-                            pendingSourceSummary,
+                        renderPackage(pendingCurriculum, pendingSourceText, pendingSourceSummary,
                             generated.suitability === "blocked"
                                 ? `This source was not converted into a study set: ${generated.message || "The material is not suitable for generated practice."}`
-                                : generated.message || "Question generation failed.",
-                        );
+                                : generated.message || "Question generation failed.");
                         return;
                     }
 
                     const harness = validateGeneratedDrafts(pendingCurriculum, generated.drafts);
                     if (!harness.accepted.length) {
-                        renderPackage(
-                            pendingCurriculum,
-                            pendingSourceText,
-                            pendingSourceSummary,
-                            "The model returned questions, but none passed the grounding and quality checks. Nothing was saved.",
-                        );
+                        renderPackage(pendingCurriculum, pendingSourceText, pendingSourceSummary,
+                            "The model returned questions, but none passed the grounding and quality checks. Nothing was saved.");
                         return;
                     }
 
-                    const merged = mergeGeneratedDrafts(pendingCurriculum, harness.accepted);
-                    const warningCount = generated.warnings.length + harness.issues.filter((issue) => issue.severity === "warning").length;
-                    const rejectedCount = generated.rejectedCount + harness.rejected.length;
-                    const message = `${harness.accepted.length} grounded question${harness.accepted.length === 1 ? "" : "s"} passed the v1 harness.` +
-                        (rejectedCount ? ` ${rejectedCount} draft${rejectedCount === 1 ? " was" : "s were"} rejected.` : "") +
-                        (warningCount ? ` ${warningCount} quality warning${warningCount === 1 ? " remains" : "s remain"} for later review.` : "");
-                    renderPackage(merged, pendingSourceText, pendingSourceSummary, message);
+                    const merged = mergeGeneratedDrafts(pendingCurriculum, harness.accepted.map((draft) => ({ ...draft, validationStatus: "draft" as const })));
+                    saveImportedCurriculum(merged);
+                    window.location.href = "/curriculum-review";
                 } catch (error) {
-                    renderPackage(
-                        pendingCurriculum,
-                        pendingSourceText,
-                        pendingSourceSummary,
-                        error instanceof Error ? error.message : "Question generation failed unexpectedly.",
-                    );
+                    renderPackage(pendingCurriculum, pendingSourceText, pendingSourceSummary,
+                        error instanceof Error ? error.message : "Question generation failed unexpectedly.");
                 }
             });
             actions.append(generate);
         }
 
+        if (stats.drafts) {
+            const review = document.createElement("a");
+            review.className = "new-session-button";
+            review.href = "/curriculum-review";
+            review.textContent = "Review generated questions";
+            actions.append(review);
+        }
+
         const save = document.createElement("button");
-        save.className = stats.approved ? "new-session-button" : "secondary-button";
+        save.className = "secondary-button";
         save.type = "button";
-        save.textContent = stats.approved ? "Save generated curriculum" : "Save curriculum structure";
+        save.textContent = stats.drafts ? "Save curriculum" : "Save curriculum structure";
         save.addEventListener("click", () => {
             if (!pendingCurriculum) return;
             saveImportedCurriculum(pendingCurriculum);
-            const confirmation = document.createElement("p");
-            confirmation.textContent = stats.approved
-                ? "Saved in this browser. Approved questions are ready for practice."
+            note.textContent = stats.drafts
+                ? "Saved in this browser. Review generated questions before practice."
                 : "Saved in this browser. This curriculum structure is ready for generation later.";
-            const nextAction = document.createElement("a");
-            nextAction.className = "new-session-button";
-            nextAction.href = stats.approved ? "/practice/imported" : "/import";
-            nextAction.textContent = stats.approved ? "Practice this curriculum" : "Curriculum saved";
-            actions.replaceChildren(nextAction);
-            note.replaceWith(confirmation);
         });
         actions.append(save);
 
@@ -161,7 +156,7 @@ import Layout from "../layouts/Layout.astro";
         children.push(dl, note, actions);
 
         if (sourceText) {
-            const request = createQuestionGenerationRequest(curriculum, sourceText);
+            const request = createQuestionGenerationRequest(curriculum, sourceText, undefined, selectedVerificationTier());
             const generation = document.createElement("details");
             generation.className = "concept-details";
             const summary = document.createElement("summary");
@@ -169,7 +164,7 @@ import Layout from "../layouts/Layout.astro";
             const body = document.createElement("div");
             body.className = "progress-summary";
             const target = document.createElement("p");
-            target.textContent = `Target: ${request.targetQuestionCount} questions across ${curriculum.learningObjectives.length} learning objective${curriculum.learningObjectives.length === 1 ? "" : "s"}.`;
+            target.textContent = `Target: ${request.targetQuestionCount} questions across ${curriculum.learningObjectives.length} learning objective${curriculum.learningObjectives.length === 1 ? "" : "s"}. Verification: ${request.verificationTier === "high-assurance" ? "High assurance" : "Classroom grounded"}.`;
             const guidance = document.createElement("ul");
             request.qualityGuidance.forEach((item) => {
                 const li = document.createElement("li");
@@ -191,39 +186,28 @@ import Layout from "../layouts/Layout.astro";
         pendingSourceText = "";
         pendingSourceSummary = "";
         if (!imported.ok || !imported.curriculum) {
-            const heading = document.createElement("h2");
-            heading.textContent = "Import check";
-            const intro = document.createElement("p");
-            intro.textContent = "This package needs attention before it can enter the learning engine.";
+            const heading = document.createElement("h2"); heading.textContent = "Import check";
+            const intro = document.createElement("p"); intro.textContent = "This package needs attention before it can enter the learning engine.";
             const list = document.createElement("ul");
-            imported.errors.forEach((error) => {
-                const item = document.createElement("li");
-                item.textContent = error;
-                list.append(item);
-            });
-            result.replaceChildren(heading, intro, list);
-            return;
+            imported.errors.forEach((error) => { const item = document.createElement("li"); item.textContent = error; list.append(item); });
+            result.replaceChildren(heading, intro, list); return;
         }
         renderPackage(imported.curriculum);
     };
 
     input?.addEventListener("change", async () => {
-        const file = input.files?.[0];
-        if (!file) return;
+        const file = input.files?.[0]; if (!file) return;
         const raw = await file.text();
         const isJson = file.name.toLowerCase().endsWith(".json") || file.type === "application/json";
-        if (isJson) {
-            renderJson(raw);
-            return;
-        }
-        if (!raw.trim()) {
-            if (result) result.innerHTML = "<h2>Import check</h2><p>This source file is empty.</p>";
-            return;
-        }
+        if (isJson) { renderJson(raw); return; }
+        if (!raw.trim()) { if (result) result.innerHTML = "<h2>Import check</h2><p>This source file is empty.</p>"; return; }
         const ingested = ingestTextSource({ fileName: file.name, text: raw, mimeType: file.type });
         const summary = `${ingested.wordCount} words · ${ingested.sections.length} source section${ingested.sections.length === 1 ? "" : "s"} detected. Markdown headings become initial curriculum concepts.`;
         renderPackage(ingested.curriculum, raw, summary);
     });
 
+    verificationSelect?.addEventListener("change", () => {
+        if (pendingCurriculum) renderPackage(pendingCurriculum, pendingSourceText, pendingSourceSummary);
+    });
     sampleButton?.addEventListener("click", () => renderJson(JSON.stringify(sampleCurriculum)));
 </script>
