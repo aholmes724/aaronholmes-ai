@@ -7,6 +7,7 @@
 
 export interface Question {
     id: string;
+    version?: number;
     type: "single-select" | "multi-select";
     prompt: string;
     answers: Answer[];
