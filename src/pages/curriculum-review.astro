@@ -1,0 +1,138 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Review Questions | Aaron Holmes">
+  <main class="container">
+    <div class="practice-links"><a href="/import">← Import</a><a href="/practice">Practice</a></div>
+    <h1>Review generated questions</h1>
+    <p>AI-generated questions stay in draft until an educator or author approves them. Inspect the answer, explanation, and source evidence before publishing.</p>
+
+    <section id="review-summary" class="progress-summary" aria-live="polite">
+      <h2>Review queue</h2>
+      <p>Loading saved curriculum…</p>
+    </section>
+
+    <section id="review-list"></section>
+  </main>
+</Layout>
+
+<script>
+  import { readImportedCurriculum, saveImportedCurriculum } from "../data/curriculum/storage";
+  import type { CurriculumPackage, CurriculumQuestionDraft, DraftValidationStatus } from "../data/curriculum/types";
+
+  const summary = document.querySelector<HTMLElement>("#review-summary");
+  const list = document.querySelector<HTMLElement>("#review-list");
+  let curriculum: CurriculumPackage | null = null;
+
+  const statusLabel = (status: DraftValidationStatus) => ({ draft: "Draft", reviewed: "Reviewed", approved: "Approved", rejected: "Rejected" }[status]);
+
+  function saveStatus(questionId: string, status: DraftValidationStatus) {
+    if (!curriculum) return;
+    curriculum = {
+      ...curriculum,
+      questionDrafts: curriculum.questionDrafts.map((draft) => draft.id === questionId ? { ...draft, validationStatus: status } : draft),
+    };
+    saveImportedCurriculum(curriculum);
+    render();
+  }
+
+  function renderQuestion(draft: CurriculumQuestionDraft, index: number) {
+    const card = document.createElement("article");
+    card.className = "progress-summary";
+
+    const title = document.createElement("h2");
+    title.textContent = `${index + 1}. ${draft.prompt}`;
+
+    const meta = document.createElement("p");
+    const tier = draft.generation?.verificationTier === "high-assurance" ? "High assurance" : "Classroom grounded";
+    meta.textContent = `${statusLabel(draft.validationStatus)} · ${tier} · ${draft.learningStage} · ${draft.difficulty}`;
+
+    const answers = document.createElement("ul");
+    draft.answers.forEach((answer) => {
+      const li = document.createElement("li");
+      li.textContent = `${answer.correct ? "✓ " : ""}${answer.text}`;
+      if (answer.correct) li.style.fontWeight = "700";
+      answers.append(li);
+    });
+
+    const explanation = document.createElement("p");
+    explanation.innerHTML = `<strong>Explanation:</strong> ${draft.explanation}`;
+
+    const evidence = document.createElement("details");
+    const evidenceSummary = document.createElement("summary");
+    evidenceSummary.textContent = "Source evidence";
+    const evidenceBody = document.createElement("div");
+    evidenceBody.className = "progress-summary";
+    const reference = document.createElement("p");
+    reference.innerHTML = `<strong>${draft.sourceEvidence?.reference || draft.sourceReference}</strong>${draft.sourceEvidence?.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`;
+    const excerpt = document.createElement("blockquote");
+    excerpt.textContent = draft.sourceEvidence?.excerpt || "No evidence excerpt was supplied.";
+    evidenceBody.append(reference, excerpt);
+    evidence.append(evidenceSummary, evidenceBody);
+
+    const controls = document.createElement("div");
+    controls.className = "progress-actions";
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "new-session-button";
+    approve.textContent = "Approve";
+    approve.addEventListener("click", () => saveStatus(draft.id, "approved"));
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.className = "secondary-button";
+    reject.textContent = "Reject";
+    reject.addEventListener("click", () => saveStatus(draft.id, "rejected"));
+    controls.append(approve, reject);
+
+    card.append(title, meta, answers, explanation, evidence, controls);
+    return card;
+  }
+
+  function render() {
+    if (!summary || !list) return;
+    if (!curriculum) {
+      summary.innerHTML = "<h2>Review queue</h2><p>No imported curriculum is saved in this browser.</p>";
+      list.replaceChildren();
+      return;
+    }
+
+    const drafts = curriculum.questionDrafts;
+    const approved = drafts.filter((draft) => draft.validationStatus === "approved").length;
+    const rejected = drafts.filter((draft) => draft.validationStatus === "rejected").length;
+    const pending = drafts.length - approved - rejected;
+
+    const heading = document.createElement("h2");
+    heading.textContent = curriculum.title;
+    const counts = document.createElement("p");
+    counts.textContent = `${drafts.length} generated · ${pending} awaiting review · ${approved} approved · ${rejected} rejected`;
+    const note = document.createElement("p");
+    note.textContent = "Classroom grounded uses the supplied curriculum as the instructional authority. High assurance is deliberately more conservative about ambiguous or weakly supported claims; it is not a substitute for independent external-source verification.";
+
+    const actions = document.createElement("div");
+    actions.className = "progress-actions";
+    const approveAll = document.createElement("button");
+    approveAll.type = "button";
+    approveAll.className = "secondary-button";
+    approveAll.textContent = "Approve all remaining drafts";
+    approveAll.addEventListener("click", () => {
+      if (!curriculum) return;
+      curriculum = { ...curriculum, questionDrafts: curriculum.questionDrafts.map((draft) => draft.validationStatus === "draft" ? { ...draft, validationStatus: "approved" as const } : draft) };
+      saveImportedCurriculum(curriculum);
+      render();
+    });
+    const practice = document.createElement("a");
+    practice.href = "/practice/imported";
+    practice.className = "new-session-button";
+    practice.textContent = "Practice approved questions";
+    if (!approved) practice.setAttribute("aria-disabled", "true");
+    actions.append(approveAll, practice);
+
+    summary.replaceChildren(heading, counts, note, actions);
+    list.replaceChildren(...drafts.map(renderQuestion));
+  }
+
+  const stored = readImportedCurriculum();
+  curriculum = stored?.curriculum ?? null;
+  render();
+</script>
