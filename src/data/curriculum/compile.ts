@@ -21,6 +21,8 @@ export function compileCurriculumQuestions(
         .filter((draft) => draft.validationStatus === "approved")
         .map((draft) => ({
             id: draft.id,
+            version: draft.version ?? 1,
+            ...(draft.semanticKey && { semanticKey: draft.semanticKey }),
             type: draft.type,
             prompt: draft.prompt,
             answers: draft.answers,
