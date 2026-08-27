@@ -40,11 +40,20 @@ export function parseCurriculumJson(raw: string): CurriculumImportResult {
 }
 
 export function summarizeCurriculum(curriculum: CurriculumPackage) {
+    const aiValidated = curriculum.questionDrafts.filter(
+        (draft) => draft.validationStatus === "ai-validated",
+    ).length;
+    const humanApproved = curriculum.questionDrafts.filter(
+        (draft) => draft.validationStatus === "approved",
+    ).length;
+
     return {
         sources: curriculum.sources.length,
         concepts: curriculum.concepts.length,
         objectives: curriculum.learningObjectives.length,
         drafts: curriculum.questionDrafts.length,
-        approved: curriculum.questionDrafts.filter((draft) => draft.validationStatus === "approved").length,
+        aiValidated,
+        humanApproved,
+        practiceReady: aiValidated + humanApproved,
     };
 }
