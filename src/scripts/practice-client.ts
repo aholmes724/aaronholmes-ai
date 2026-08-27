@@ -9,7 +9,10 @@ import {
     getModeDescription,
     type QuestionMeta,
 } from "../data/practice-modes";
-import { readQuestionReviewStates } from "../data/question-feedback";
+import {
+    getQuestionVersionKey,
+    readQuestionReviewStates,
+} from "../data/question-feedback";
 
 const sessionId = crypto.randomUUID();
 const sessionStartedAt = new Date().toISOString();
@@ -43,14 +46,21 @@ const getQuiz = (question: HTMLElement) =>
 const getQuestionId = (question: HTMLElement) =>
     getQuiz(question)?.dataset.questionId ?? "";
 
-const retiredQuestionIds = new Set(
+const getQuestionVersion = (question: HTMLElement) => {
+    const parsed = Number(getQuiz(question)?.dataset.questionVersion ?? "1");
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const retiredQuestionVersionKeys = new Set(
     readQuestionReviewStates()
         .filter((state) => state.status === "retired")
-        .map((state) => state.questionId),
+        .map((state) => getQuestionVersionKey(state.questionId, state.questionVersion)),
 );
 
-const sessionCandidates = allSessionCandidates.filter(
-    (question) => !retiredQuestionIds.has(getQuestionId(question)),
+const sessionCandidates = allSessionCandidates.filter((question) =>
+    !retiredQuestionVersionKeys.has(
+        getQuestionVersionKey(getQuestionId(question), getQuestionVersion(question)),
+    ),
 );
 
 const searchParams = new URLSearchParams(window.location.search);
