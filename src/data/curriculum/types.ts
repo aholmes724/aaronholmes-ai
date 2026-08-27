@@ -47,6 +47,13 @@ export interface SupplementalLearningResource {
     note?: string;
 }
 
+export interface QuestionGenerationMetadata {
+    provider: string;
+    model: string;
+    harnessVersion: string;
+    promptVersion: string;
+}
+
 export type DraftValidationStatus =
     | "draft"
     | "reviewed"
@@ -71,6 +78,7 @@ export interface CurriculumQuestionDraft {
     sourceReference: string;
     sourceEvidence?: SourceEvidence;
     supplementalResources?: SupplementalLearningResource[];
+    generation?: QuestionGenerationMetadata;
     shuffleAnswers?: boolean;
     validationStatus: DraftValidationStatus;
 }
