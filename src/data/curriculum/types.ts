@@ -9,6 +9,8 @@ export type CurriculumSourceKind =
     | "video"
     | "other";
 
+export type VerificationTier = "classroom" | "high-assurance";
+
 export interface CurriculumSource {
     id: string;
     title: string;
@@ -52,6 +54,7 @@ export interface QuestionGenerationMetadata {
     model: string;
     harnessVersion: string;
     promptVersion: string;
+    verificationTier?: VerificationTier;
 }
 
 export type DraftValidationStatus =
