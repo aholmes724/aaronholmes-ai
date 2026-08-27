@@ -57,8 +57,11 @@ export interface QuestionGenerationMetadata {
     verificationTier?: VerificationTier;
 }
 
+export type QuestionAuthorship = "ai-generated" | "human-edited" | "human-authored";
+
 export type DraftValidationStatus =
     | "draft"
+    | "ai-validated"
     | "reviewed"
     | "approved"
     | "rejected";
@@ -82,6 +85,7 @@ export interface CurriculumQuestionDraft {
     sourceEvidence?: SourceEvidence;
     supplementalResources?: SupplementalLearningResource[];
     generation?: QuestionGenerationMetadata;
+    authorship?: QuestionAuthorship;
     shuffleAnswers?: boolean;
     validationStatus: DraftValidationStatus;
 }
