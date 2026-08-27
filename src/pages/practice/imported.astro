@@ -117,6 +117,10 @@ import Layout from "../../layouts/Layout.astro";
                     correct,
                     answeredAt: new Date().toISOString(),
                     sessionId,
+                    ...(stored && {
+                        curriculumId: stored.curriculum.id,
+                        curriculumTitle: stored.curriculum.title,
+                    }),
                     ...(question.topic && { topic: question.topic }),
                     ...(question.concepts?.length && { concepts: question.concepts }),
                     ...(question.masteryConcept && { masteryConcept: question.masteryConcept }),
@@ -143,7 +147,7 @@ import Layout from "../../layouts/Layout.astro";
     }
 
     next?.addEventListener("click", () => {
-        if (!answered) return;
+        if (!answered || !stored) return;
         if (current === questions.length - 1) {
             if (host) host.replaceChildren();
             if (actions) actions.hidden = true;
@@ -152,13 +156,15 @@ import Layout from "../../layouts/Layout.astro";
             if (finalTotal) finalTotal.textContent = String(questions.length);
             saveSessionSummary({
                 id: sessionId,
-                mode: "imported-curriculum",
+                mode: `Curriculum · ${stored.curriculum.title}`,
                 requestedLength: "all",
                 startedAt,
                 completedAt: new Date().toISOString(),
                 questionCount: questions.length,
                 answeredCount: questions.length,
                 correctCount: score,
+                curriculumId: stored.curriculum.id,
+                curriculumTitle: stored.curriculum.title,
             });
             return;
         }
