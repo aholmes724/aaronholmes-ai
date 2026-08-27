@@ -7,7 +7,6 @@
 
 export interface Question {
     id: string;
-    version?: number;
     type: "single-select" | "multi-select";
     prompt: string;
     answers: Answer[];
@@ -22,4 +21,16 @@ export interface Question {
     shuffleAnswers?: boolean;
     masteryConcept?: string;
     learningObjective?: string;
+    version?: number;
+
+    /**
+     * Optional stable semantic grouping key for related question variants.
+     *
+     * Exact feedback identity remains id + version. This key is deliberately
+     * separate so future curriculum-generated questions can share quality
+     * signals without pretending that semantically related questions are the
+     * same concrete item. A later embedding/vector layer can augment or replace
+     * how these groups are discovered without changing question identity.
+     */
+    semanticKey?: string;
 }
