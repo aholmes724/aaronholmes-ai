@@ -1,0 +1,84 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Import Curriculum | Aaron Holmes">
+    <main class="container">
+        <div class="practice-links"><a href="/learning">← Learning</a><a href="/practice">Practice</a></div>
+        <h1>Import curriculum</h1>
+        <p>Bring a curriculum package into the learning engine without editing TypeScript question files.</p>
+
+        <section class="progress-summary">
+            <h2>Curriculum package</h2>
+            <p>This first importer accepts the app's portable JSON curriculum format. PDF, DOCX, notes, and AI-assisted extraction can feed this same pipeline next.</p>
+            <label for="curriculum-file"><strong>Choose curriculum JSON</strong></label>
+            <input id="curriculum-file" type="file" accept="application/json,.json" />
+            <div class="progress-actions"><button id="load-sample" class="secondary-button" type="button">Load sample package</button></div>
+        </section>
+
+        <section id="import-result" class="progress-summary" aria-live="polite">
+            <h2>Import check</h2>
+            <p>No curriculum loaded yet.</p>
+        </section>
+    </main>
+</Layout>
+
+<script>
+    import { parseCurriculumJson, summarizeCurriculum } from "../data/curriculum/importer";
+    import { sampleCurriculum } from "../data/curriculum/sample";
+
+    const input = document.querySelector<HTMLInputElement>("#curriculum-file");
+    const sampleButton = document.querySelector<HTMLButtonElement>("#load-sample");
+    const result = document.querySelector<HTMLElement>("#import-result");
+
+    const render = (raw: string) => {
+        if (!result) return;
+        const imported = parseCurriculumJson(raw);
+        const heading = document.createElement("h2");
+        heading.textContent = "Import check";
+
+        if (!imported.ok || !imported.curriculum) {
+            const intro = document.createElement("p");
+            intro.textContent = "This package needs attention before it can enter the learning engine.";
+            const list = document.createElement("ul");
+            imported.errors.forEach((error) => {
+                const item = document.createElement("li");
+                item.textContent = error;
+                list.append(item);
+            });
+            result.replaceChildren(heading, intro, list);
+            return;
+        }
+
+        const curriculum = imported.curriculum;
+        const stats = summarizeCurriculum(curriculum);
+        const title = document.createElement("p");
+        title.innerHTML = `<strong>${curriculum.title}</strong> · version ${curriculum.version}`;
+        const dl = document.createElement("dl");
+        dl.className = "progress-stats";
+        const entries = [
+            ["Sources", stats.sources], ["Concepts", stats.concepts], ["Objectives", stats.objectives],
+            ["Question drafts", stats.drafts], ["Approved", stats.approved],
+        ];
+        entries.forEach(([labelText, value]) => {
+            const wrapper = document.createElement("div");
+            const dt = document.createElement("dt");
+            const dd = document.createElement("dd");
+            dt.textContent = String(labelText);
+            dd.textContent = String(value);
+            wrapper.append(dt, dd);
+            dl.append(wrapper);
+        });
+        const note = document.createElement("p");
+        note.textContent = "Valid package. The next stage can persist it and compile approved drafts into practice questions.";
+        result.replaceChildren(heading, title, dl, note);
+    };
+
+    input?.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        render(await file.text());
+    });
+
+    sampleButton?.addEventListener("click", () => render(JSON.stringify(sampleCurriculum)));
+</script>
