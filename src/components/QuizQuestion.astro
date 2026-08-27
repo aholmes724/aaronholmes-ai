@@ -18,6 +18,7 @@ const learningObjective = getLearningObjective(
 <section
     class="quiz-question"
     data-question-id={question.id}
+    data-question-version={question.version ?? 1}
     data-topic={question.topic}
     data-concepts={question.concepts?.join(",")}
     data-difficulty={question.difficulty}
