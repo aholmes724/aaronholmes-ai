@@ -1,10 +1,11 @@
-import type { CurriculumPackage, CurriculumQuestionDraft } from "./types";
+import type { CurriculumPackage, CurriculumQuestionDraft, VerificationTier } from "./types";
 
 export interface QuestionGenerationRequest {
     curriculum: CurriculumPackage;
     sourceText: string;
     targetQuestionCount: number;
     qualityGuidance: string[];
+    verificationTier: VerificationTier;
 }
 
 export interface QuestionGenerationResult {
@@ -29,11 +30,13 @@ export function createQuestionGenerationRequest(
     curriculum: CurriculumPackage,
     sourceText: string,
     targetQuestionCount = Math.max(5, curriculum.learningObjectives.length * 3),
+    verificationTier: VerificationTier = "classroom",
 ): QuestionGenerationRequest {
     return {
         curriculum,
         sourceText,
         targetQuestionCount,
         qualityGuidance: DEFAULT_QUESTION_QUALITY_GUIDANCE,
+        verificationTier,
     };
 }
