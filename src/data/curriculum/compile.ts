@@ -18,7 +18,10 @@ export function compileCurriculumQuestions(
     }
 
     return curriculum.questionDrafts
-        .filter((draft) => draft.validationStatus === "approved")
+        .filter((draft) =>
+            draft.validationStatus === "ai-validated" ||
+            draft.validationStatus === "approved",
+        )
         .map((draft) => ({
             id: draft.id,
             version: draft.version ?? 1,
