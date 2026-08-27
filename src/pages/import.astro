@@ -6,13 +6,13 @@ import Layout from "../layouts/Layout.astro";
     <main class="container">
         <div class="practice-links"><a href="/learning">← Learning</a><a href="/practice">Practice</a></div>
         <h1>Import curriculum</h1>
-        <p>Bring a curriculum package into the learning engine without editing TypeScript question files.</p>
+        <p>Bring source material into the learning engine without editing TypeScript question files.</p>
 
         <section class="progress-summary">
-            <h2>Curriculum package</h2>
-            <p>This first importer accepts the app's portable JSON curriculum format. PDF, DOCX, notes, and AI-assisted extraction can feed this same pipeline next.</p>
-            <label for="curriculum-file"><strong>Choose curriculum JSON</strong></label>
-            <input id="curriculum-file" type="file" accept="application/json,.json" />
+            <h2>Source material</h2>
+            <p>Upload plain text or Markdown to create a curriculum structure, or load an existing portable JSON curriculum package.</p>
+            <label for="curriculum-file"><strong>Choose .txt, .md, or curriculum .json</strong></label>
+            <input id="curriculum-file" type="file" accept="text/plain,text/markdown,application/json,.txt,.md,.markdown,.json" />
             <div class="progress-actions"><button id="load-sample" class="secondary-button" type="button">Load sample package</button></div>
         </section>
 
@@ -28,35 +28,22 @@ import Layout from "../layouts/Layout.astro";
     import { parseCurriculumJson, summarizeCurriculum } from "../data/curriculum/importer";
     import { sampleCurriculum } from "../data/curriculum/sample";
     import { saveImportedCurriculum } from "../data/curriculum/storage";
+    import { ingestTextSource } from "../data/curriculum/source-ingestion";
+    import { createQuestionGenerationRequest } from "../data/curriculum/generation-contract";
 
     const input = document.querySelector<HTMLInputElement>("#curriculum-file");
     const sampleButton = document.querySelector<HTMLButtonElement>("#load-sample");
     const result = document.querySelector<HTMLElement>("#import-result");
     let pendingCurriculum: CurriculumPackage | null = null;
+    let pendingSourceText = "";
 
-    const render = (raw: string) => {
+    const renderPackage = (curriculum: CurriculumPackage, sourceText = "", sourceSummary?: string) => {
         if (!result) return;
-        const imported = parseCurriculumJson(raw);
+        pendingCurriculum = curriculum;
+        pendingSourceText = sourceText;
+        const stats = summarizeCurriculum(curriculum);
         const heading = document.createElement("h2");
         heading.textContent = "Import check";
-        pendingCurriculum = null;
-
-        if (!imported.ok || !imported.curriculum) {
-            const intro = document.createElement("p");
-            intro.textContent = "This package needs attention before it can enter the learning engine.";
-            const list = document.createElement("ul");
-            imported.errors.forEach((error) => {
-                const item = document.createElement("li");
-                item.textContent = error;
-                list.append(item);
-            });
-            result.replaceChildren(heading, intro, list);
-            return;
-        }
-
-        const curriculum = imported.curriculum;
-        pendingCurriculum = curriculum;
-        const stats = summarizeCurriculum(curriculum);
         const title = document.createElement("p");
         title.innerHTML = `<strong>${curriculum.title}</strong> · version ${curriculum.version}`;
         const dl = document.createElement("dl");
@@ -76,7 +63,10 @@ import Layout from "../layouts/Layout.astro";
         });
 
         const note = document.createElement("p");
-        note.textContent = "Valid package. Save it to make approved drafts available for imported-curriculum practice.";
+        note.textContent = stats.approved
+            ? "Valid package. Save it to make approved drafts available for imported-curriculum practice."
+            : "Source structure is ready. Question generation is the next stage; this package has no approved questions yet.";
+
         const actions = document.createElement("div");
         actions.className = "progress-actions";
         const save = document.createElement("button");
@@ -87,23 +77,92 @@ import Layout from "../layouts/Layout.astro";
             if (!pendingCurriculum) return;
             saveImportedCurriculum(pendingCurriculum);
             const confirmation = document.createElement("p");
-            confirmation.textContent = "Saved in this browser. Approved questions are ready for practice.";
-            const practiceLink = document.createElement("a");
-            practiceLink.className = "new-session-button";
-            practiceLink.href = "/practice/imported";
-            practiceLink.textContent = "Practice this curriculum";
-            actions.replaceChildren(practiceLink);
+            confirmation.textContent = stats.approved
+                ? "Saved in this browser. Approved questions are ready for practice."
+                : "Saved in this browser. This curriculum is ready for the question-generation stage.";
+            const nextAction = document.createElement("a");
+            nextAction.className = "new-session-button";
+            nextAction.href = stats.approved ? "/practice/imported" : "/import";
+            nextAction.textContent = stats.approved ? "Practice this curriculum" : "Curriculum saved";
+            actions.replaceChildren(nextAction);
             note.replaceWith(confirmation);
         });
         actions.append(save);
-        result.replaceChildren(heading, title, dl, note, actions);
+
+        const children: Node[] = [heading, title];
+        if (sourceSummary) {
+            const summary = document.createElement("p");
+            summary.textContent = sourceSummary;
+            children.push(summary);
+        }
+        children.push(dl, note, actions);
+
+        if (sourceText) {
+            const request = createQuestionGenerationRequest(curriculum, sourceText);
+            const generation = document.createElement("details");
+            generation.className = "concept-details";
+            const summary = document.createElement("summary");
+            summary.textContent = "Generation brief";
+            const body = document.createElement("div");
+            body.className = "progress-summary";
+            const target = document.createElement("p");
+            target.textContent = `Target: ${request.targetQuestionCount} questions across ${curriculum.learningObjectives.length} learning objective${curriculum.learningObjectives.length === 1 ? "" : "s"}.`;
+            const guidance = document.createElement("ul");
+            request.qualityGuidance.forEach((item) => {
+                const li = document.createElement("li");
+                li.textContent = item;
+                guidance.append(li);
+            });
+            body.append(target, guidance);
+            generation.append(summary, body);
+            children.push(generation);
+        }
+
+        result.replaceChildren(...children);
+    };
+
+    const renderJson = (raw: string) => {
+        if (!result) return;
+        const imported = parseCurriculumJson(raw);
+        pendingCurriculum = null;
+        pendingSourceText = "";
+        if (!imported.ok || !imported.curriculum) {
+            const heading = document.createElement("h2");
+            heading.textContent = "Import check";
+            const intro = document.createElement("p");
+            intro.textContent = "This package needs attention before it can enter the learning engine.";
+            const list = document.createElement("ul");
+            imported.errors.forEach((error) => {
+                const item = document.createElement("li");
+                item.textContent = error;
+                list.append(item);
+            });
+            result.replaceChildren(heading, intro, list);
+            return;
+        }
+        renderPackage(imported.curriculum);
     };
 
     input?.addEventListener("change", async () => {
         const file = input.files?.[0];
         if (!file) return;
-        render(await file.text());
+        const raw = await file.text();
+        const isJson = file.name.toLowerCase().endsWith(".json") || file.type === "application/json";
+        if (isJson) {
+            renderJson(raw);
+            return;
+        }
+        if (!raw.trim()) {
+            if (result) result.innerHTML = "<h2>Import check</h2><p>This source file is empty.</p>";
+            return;
+        }
+        const ingested = ingestTextSource({ fileName: file.name, text: raw, mimeType: file.type });
+        renderPackage(
+            ingested.curriculum,
+            raw,
+            `${ingested.wordCount} words · ${ingested.sections.length} source section${ingested.sections.length === 1 ? "" : "s"} detected. Markdown headings become initial curriculum concepts.`,
+        );
     });
 
-    sampleButton?.addEventListener("click", () => render(JSON.stringify(sampleCurriculum)));
+    sampleButton?.addEventListener("click", () => renderJson(JSON.stringify(sampleCurriculum)));
 </script>
