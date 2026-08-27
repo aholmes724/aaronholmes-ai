@@ -26,6 +26,8 @@ import Layout from "../../layouts/Layout.astro";
 <script>
     import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
     import { savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
+    import { saveQuestionFeedback, QUESTION_FEEDBACK_REASONS, type QuestionFeedbackReason } from "../../data/question-feedback";
+    import { syncQuestionFeedback } from "../../data/shared-feedback";
 
     const info = document.querySelector<HTMLElement>("#curriculum-info");
     const host = document.querySelector<HTMLElement>("#runtime-question");
@@ -50,6 +52,69 @@ import Layout from "../../layouts/Layout.astro";
         const body = document.createElement("p");
         body.textContent = bodyText;
         info.replaceChildren(title, body);
+    };
+
+    const formatReason = (reason: QuestionFeedbackReason) =>
+        reason.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
+
+    const appendSourceAndFeedback = (question: (typeof questions)[number], review: HTMLElement) => {
+        const draft = stored?.curriculum.questionDrafts.find((item) => item.id === question.id);
+
+        if (draft?.sourceEvidence?.excerpt) {
+            const source = document.createElement("details");
+            const sourceSummary = document.createElement("summary");
+            sourceSummary.textContent = "Source";
+            const reference = document.createElement("p");
+            const strong = document.createElement("strong");
+            strong.textContent = draft.sourceEvidence.reference || draft.sourceReference;
+            reference.append(strong);
+            if (draft.sourceEvidence.locator) reference.append(document.createTextNode(` · ${draft.sourceEvidence.locator}`));
+            const excerpt = document.createElement("blockquote");
+            excerpt.textContent = draft.sourceEvidence.excerpt;
+            source.append(sourceSummary, reference, excerpt);
+            review.append(source);
+        }
+
+        const feedback = document.createElement("div");
+        feedback.className = "progress-actions";
+        const reason = document.createElement("select");
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "Optional reason";
+        reason.append(blank);
+        QUESTION_FEEDBACK_REASONS.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = formatReason(value);
+            reason.append(option);
+        });
+
+        const flag = document.createElement("button");
+        flag.type = "button";
+        flag.className = "secondary-button";
+        flag.textContent = "Flag question";
+        const confirmation = document.createElement("span");
+        confirmation.setAttribute("aria-live", "polite");
+
+        flag.addEventListener("click", async () => {
+            const selectedReason = reason.value as QuestionFeedbackReason | "";
+            const saved = saveQuestionFeedback({
+                questionId: question.id,
+                questionVersion: question.version ?? 1,
+                ...(question.semanticKey ? { semanticKey: question.semanticKey } : {}),
+                ...(selectedReason ? { reason: selectedReason } : {}),
+                ...(question.topic ? { topic: question.topic } : {}),
+                ...(question.masteryConcept ? { masteryConcept: question.masteryConcept } : {}),
+                ...(question.learningObjective ? { learningObjective: question.learningObjective } : {}),
+                ...(question.learningStage ? { learningStage: question.learningStage } : {}),
+            });
+            flag.disabled = true;
+            confirmation.textContent = " Flagged.";
+            await syncQuestionFeedback(saved);
+        });
+
+        feedback.append(flag, reason, confirmation);
+        review.append(feedback);
     };
 
     const renderQuestion = () => {
@@ -109,6 +174,7 @@ import Layout from "../../layouts/Layout.astro";
                     explanation.textContent = explanationText;
                     review.append(explanation);
                 }
+                appendSourceAndFeedback(question, review);
                 review.hidden = false;
 
                 savePracticeAttempt({
@@ -139,10 +205,10 @@ import Layout from "../../layouts/Layout.astro";
         setInfo("No imported curriculum", "Save a valid curriculum package from the importer first.");
         if (host) host.textContent = "Nothing to practice yet.";
     } else if (!questions.length) {
-        setInfo(stored.curriculum.title, "This curriculum has no approved question drafts yet.");
-        if (host) host.textContent = "Approve at least one draft before practicing.";
+        setInfo(stored.curriculum.title, "This curriculum has no practice-ready questions yet.");
+        if (host) host.textContent = "Generate AI-validated questions or add an approved question first.";
     } else {
-        setInfo(stored.curriculum.title, `${questions.length} approved question${questions.length === 1 ? "" : "s"} loaded from this browser.`);
+        setInfo(stored.curriculum.title, `${questions.length} practice-ready question${questions.length === 1 ? "" : "s"} loaded from this browser.`);
         renderQuestion();
     }
 
