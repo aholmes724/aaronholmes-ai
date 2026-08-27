@@ -191,6 +191,21 @@ export function saveQuestionFeedback(
     return saved;
 }
 
+export function removeQuestionFeedback(feedback: QuestionFeedback): boolean {
+    try {
+        const existing = readQuestionFeedback();
+        const remaining = existing.filter((entry) => entry.id !== feedback.id);
+        if (remaining.length === existing.length) return false;
+        localStorage.setItem(
+            QUESTION_FEEDBACK_STORAGE_KEY,
+            JSON.stringify(remaining),
+        );
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export function readQuestionReviewStates(): QuestionReviewState[] {
     try {
         const stored = localStorage.getItem(QUESTION_REVIEW_STORAGE_KEY);
