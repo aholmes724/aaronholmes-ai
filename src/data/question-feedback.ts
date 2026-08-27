@@ -22,6 +22,7 @@ export type QuestionReviewStatus =
 export interface QuestionFeedback {
     id: string;
     questionId: string;
+    questionVersion: number;
     reason?: QuestionFeedbackReason;
     note?: string;
     createdAt: string;
@@ -33,11 +34,17 @@ export interface QuestionFeedback {
 
 export interface QuestionReviewState {
     questionId: string;
+    questionVersion: number;
     status: QuestionReviewStatus;
     updatedAt: string;
 }
 
 const validFeedbackReasons = new Set<string>(QUESTION_FEEDBACK_REASONS);
+
+export const getQuestionVersionKey = (
+    questionId: string,
+    questionVersion = 1,
+): string => `${questionId}::v${questionVersion}`;
 
 function normalizeQuestionFeedback(
     feedback: unknown[],
@@ -56,9 +63,15 @@ function normalizeQuestionFeedback(
                 validFeedbackReasons.has(rawReason)
                     ? (rawReason as QuestionFeedbackReason)
                     : undefined;
+            const rawVersion = (entry as { questionVersion?: unknown }).questionVersion;
+            const questionVersion =
+                typeof rawVersion === "number" && Number.isInteger(rawVersion) && rawVersion > 0
+                    ? rawVersion
+                    : 1;
 
             return {
                 ...entry,
+                questionVersion,
                 ...(reason ? { reason } : {}),
                 ...(!reason && "reason" in entry ? { reason: undefined } : {}),
             };
@@ -68,26 +81,26 @@ function normalizeQuestionFeedback(
 function deduplicateQuestionFeedback(
     feedback: QuestionFeedback[],
 ): QuestionFeedback[] {
-    const byQuestionAndReason = new Map<string, QuestionFeedback>();
+    const byQuestionVersionAndReason = new Map<string, QuestionFeedback>();
 
     feedback.forEach((entry) => {
-        const key = `${entry.questionId}::${entry.reason ?? "bare"}`;
-        const existing = byQuestionAndReason.get(key);
+        const key = `${getQuestionVersionKey(entry.questionId, entry.questionVersion)}::${entry.reason ?? "bare"}`;
+        const existing = byQuestionVersionAndReason.get(key);
 
         if (!existing) {
-            byQuestionAndReason.set(key, entry);
+            byQuestionVersionAndReason.set(key, entry);
             return;
         }
 
         if (!existing.note && entry.note) {
-            byQuestionAndReason.set(key, {
+            byQuestionVersionAndReason.set(key, {
                 ...existing,
                 note: entry.note,
             });
         }
     });
 
-    return Array.from(byQuestionAndReason.values());
+    return Array.from(byQuestionVersionAndReason.values());
 }
 
 export function readQuestionFeedback(): QuestionFeedback[] {
@@ -102,8 +115,6 @@ export function readQuestionFeedback(): QuestionFeedback[] {
         const deduplicated = deduplicateQuestionFeedback(normalized);
         const serialized = JSON.stringify(deduplicated);
 
-        // Clean up duplicate entries and legacy/unknown reason values so old
-        // prototype data cannot leak "undefined" into review analytics.
         if (serialized !== stored) {
             localStorage.setItem(QUESTION_FEEDBACK_STORAGE_KEY, serialized);
         }
@@ -117,8 +128,12 @@ export function readQuestionFeedback(): QuestionFeedback[] {
 export function saveQuestionFeedback(
     feedback: Omit<QuestionFeedback, "id" | "createdAt">,
 ): QuestionFeedback {
-    const saved: QuestionFeedback = {
+    const normalizedFeedback = {
         ...feedback,
+        questionVersion: feedback.questionVersion || 1,
+    };
+    const saved: QuestionFeedback = {
+        ...normalizedFeedback,
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
     };
@@ -127,19 +142,20 @@ export function saveQuestionFeedback(
         const existing = readQuestionFeedback();
         const existingIndex = existing.findIndex(
             (entry) =>
-                entry.questionId === feedback.questionId &&
-                entry.reason === feedback.reason,
+                entry.questionId === normalizedFeedback.questionId &&
+                entry.questionVersion === normalizedFeedback.questionVersion &&
+                entry.reason === normalizedFeedback.reason,
         );
 
         if (existingIndex >= 0) {
             const current = existing[existingIndex];
             const updated: QuestionFeedback = {
                 ...current,
-                ...feedback,
+                ...normalizedFeedback,
                 id: current.id,
                 createdAt: current.createdAt,
-                ...(feedback.note
-                    ? { note: feedback.note }
+                ...(normalizedFeedback.note
+                    ? { note: normalizedFeedback.note }
                     : current.note
                       ? { note: current.note }
                       : {}),
@@ -170,7 +186,18 @@ export function readQuestionReviewStates(): QuestionReviewState[] {
         const stored = localStorage.getItem(QUESTION_REVIEW_STORAGE_KEY);
         if (!stored) return [];
         const parsed: unknown = JSON.parse(stored);
-        return Array.isArray(parsed) ? (parsed as QuestionReviewState[]) : [];
+        if (!Array.isArray(parsed)) return [];
+        const normalized = parsed.map((entry) => ({
+            ...(entry as QuestionReviewState),
+            questionVersion:
+                typeof (entry as QuestionReviewState).questionVersion === "number"
+                    ? (entry as QuestionReviewState).questionVersion
+                    : 1,
+        }));
+        if (JSON.stringify(normalized) !== stored) {
+            localStorage.setItem(QUESTION_REVIEW_STORAGE_KEY, JSON.stringify(normalized));
+        }
+        return normalized;
     } catch {
         return [];
     }
@@ -178,10 +205,13 @@ export function readQuestionReviewStates(): QuestionReviewState[] {
 
 export function getQuestionReviewStatus(
     questionId: string,
+    questionVersion = 1,
 ): QuestionReviewStatus {
     return (
         readQuestionReviewStates().find(
-            (state) => state.questionId === questionId,
+            (state) =>
+                state.questionId === questionId &&
+                state.questionVersion === questionVersion,
         )?.status ?? "open"
     );
 }
@@ -189,9 +219,11 @@ export function getQuestionReviewStatus(
 export function setQuestionReviewStatus(
     questionId: string,
     status: QuestionReviewStatus,
+    questionVersion = 1,
 ): QuestionReviewState {
     const updated: QuestionReviewState = {
         questionId,
+        questionVersion,
         status,
         updatedAt: new Date().toISOString(),
     };
@@ -199,7 +231,9 @@ export function setQuestionReviewStatus(
     try {
         const states = readQuestionReviewStates();
         const existingIndex = states.findIndex(
-            (state) => state.questionId === questionId,
+            (state) =>
+                state.questionId === questionId &&
+                state.questionVersion === questionVersion,
         );
 
         if (existingIndex >= 0) {
