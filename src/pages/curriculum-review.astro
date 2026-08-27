@@ -4,9 +4,13 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="Review Questions | Aaron Holmes">
   <main class="container">
-    <div class="practice-links"><a href="/import">← Import</a><a href="/practice/imported">Practice curriculum</a></div>
+    <div class="practice-links">
+      <a href="/import">← Import</a>
+      <a href="/practice/imported">Practice curriculum</a>
+      <a href="/progress">Progress</a>
+    </div>
     <h1>Review or edit questions</h1>
-    <p>This is an optional authoring layer. Questions that passed the AI harness are already usable for normal practice; educators and authors can inspect, edit, reject, or add questions at their discretion.</p>
+    <p>This is an optional authoring layer. AI-validated questions are already usable for normal practice; educators and authors can inspect evidence, review quality warnings, edit, reject, or add questions at their discretion.</p>
 
     <section id="review-summary" class="progress-summary" aria-live="polite">
       <h2>Question set</h2>
@@ -39,8 +43,7 @@ import Layout from "../layouts/Layout.astro";
     draft.validationStatus === "ai-validated" || draft.validationStatus === "approved";
 
   function persist() {
-    if (!curriculum) return;
-    saveImportedCurriculum(curriculum);
+    if (curriculum) saveImportedCurriculum(curriculum);
   }
 
   function saveStatus(questionId: string, status: DraftValidationStatus) {
@@ -78,7 +81,8 @@ import Layout from "../layouts/Layout.astro";
 
     const answersHeading = document.createElement("h3");
     answersHeading.textContent = "Answers";
-    const answerInputs = draft.answers.map((answer, index) => {
+    const answerRows = document.createElement("div");
+    const answerInputs = draft.answers.map((answer) => {
       const row = document.createElement("p");
       const correct = document.createElement("input");
       correct.type = "radio";
@@ -90,8 +94,8 @@ import Layout from "../layouts/Layout.astro";
       text.required = true;
       text.style.width = "80%";
       row.append(correct, document.createTextNode(" Correct  "), text);
-      form.append(row);
-      return { answer, correct, text, index };
+      answerRows.append(row);
+      return { answer, correct, text };
     });
 
     const evidenceLabel = document.createElement("label");
@@ -111,11 +115,10 @@ import Layout from "../layouts/Layout.astro";
     cancel.className = "secondary-button";
     cancel.type = "button";
     cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => render());
+    cancel.addEventListener("click", render);
     actions.append(save, cancel);
 
-    form.prepend(promptLabel, explanationLabel, answersHeading);
-    form.append(evidenceLabel, actions);
+    form.append(promptLabel, explanationLabel, answersHeading, answerRows, evidenceLabel, actions);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!curriculum) return;
@@ -135,6 +138,7 @@ import Layout from "../layouts/Layout.astro";
           ...draft.sourceEvidence,
           excerpt: evidence.value.trim() || draft.sourceEvidence.excerpt,
         } : undefined,
+        qualityWarnings: undefined,
         version: (draft.version ?? 1) + 1,
         authorship: "human-edited",
         validationStatus: "approved",
@@ -161,7 +165,25 @@ import Layout from "../layouts/Layout.astro";
     const meta = document.createElement("p");
     const tier = draft.generation?.verificationTier === "high-assurance" ? "High assurance" : "Classroom grounded";
     const author = draft.authorship === "human-authored" ? "Human authored" : draft.authorship === "human-edited" ? "Human edited" : "AI generated";
-    meta.textContent = `${statusLabel(draft.validationStatus)} · ${author} · ${tier} · ${draft.learningStage} · ${draft.difficulty}`;
+    const harness = draft.generation?.harnessVersion ? `Harness ${draft.generation.harnessVersion}` : "";
+    meta.textContent = [statusLabel(draft.validationStatus), author, tier, draft.learningStage, draft.difficulty, harness].filter(Boolean).join(" · ");
+
+    if (draft.qualityWarnings?.length) {
+      const warningBox = document.createElement("div");
+      warningBox.className = "progress-summary";
+      const warningHeading = document.createElement("strong");
+      warningHeading.textContent = `Quality warning${draft.qualityWarnings.length === 1 ? "" : "s"}`;
+      const warningList = document.createElement("ul");
+      draft.qualityWarnings.forEach((warning) => {
+        const item = document.createElement("li");
+        item.textContent = warning.message;
+        warningList.append(item);
+      });
+      warningBox.append(warningHeading, warningList);
+      card.append(title, meta, warningBox);
+    } else {
+      card.append(title, meta);
+    }
 
     const answers = document.createElement("ul");
     draft.answers.forEach((answer) => {
@@ -176,20 +198,16 @@ import Layout from "../layouts/Layout.astro";
     explanationStrong.textContent = "Explanation: ";
     explanation.append(explanationStrong, document.createTextNode(draft.explanation));
 
-    const evidence = document.createElement("details");
-    const evidenceSummary = document.createElement("summary");
-    evidenceSummary.textContent = "Source evidence";
-    const evidenceBody = document.createElement("div");
-    evidenceBody.className = "progress-summary";
+    const evidence = document.createElement("section");
+    evidence.className = "progress-summary";
+    const evidenceHeading = document.createElement("strong");
+    evidenceHeading.textContent = "Source evidence";
     const reference = document.createElement("p");
-    const referenceStrong = document.createElement("strong");
-    referenceStrong.textContent = draft.sourceEvidence?.reference || draft.sourceReference;
-    reference.append(referenceStrong);
+    reference.textContent = draft.sourceEvidence?.reference || draft.sourceReference;
     if (draft.sourceEvidence?.locator) reference.append(document.createTextNode(` · ${draft.sourceEvidence.locator}`));
     const excerpt = document.createElement("blockquote");
     excerpt.textContent = draft.sourceEvidence?.excerpt || "No evidence excerpt was supplied.";
-    evidenceBody.append(reference, excerpt);
-    evidence.append(evidenceSummary, evidenceBody);
+    evidence.append(evidenceHeading, reference, excerpt);
 
     const controls = document.createElement("div");
     controls.className = "progress-actions";
@@ -214,14 +232,13 @@ import Layout from "../layouts/Layout.astro";
     reject.addEventListener("click", () => saveStatus(draft.id, "rejected"));
     controls.append(approve, edit, reject);
 
-    card.append(title, meta, answers, explanation, evidence, controls);
+    card.append(answers, explanation, evidence, controls);
     return card;
   }
 
   function renderNewQuestionForm() {
     if (!authoringPanel || !curriculum) return;
     authoringPanel.replaceChildren();
-
     const wrapper = document.createElement("section");
     wrapper.className = "progress-summary";
     const heading = document.createElement("h2");
@@ -258,12 +275,23 @@ import Layout from "../layouts/Layout.astro";
       option.textContent = item.title;
       source.append(option);
     });
-
     const evidence = document.createElement("textarea");
     evidence.rows = 3;
     evidence.placeholder = "Supporting source excerpt (recommended)";
 
+    form.append(
+      document.createTextNode("Question"), document.createElement("br"), prompt,
+      document.createElement("br"), document.createTextNode("Explanation"), document.createElement("br"), explanation,
+      document.createElement("br"), document.createTextNode("Concept "), concept,
+      document.createElement("br"), document.createTextNode("Learning objective "), objective,
+      document.createElement("br"), document.createTextNode("Source "), source,
+      document.createElement("br"), document.createTextNode("Source evidence"), document.createElement("br"), evidence,
+    );
+
     const answerRows: Array<{ text: HTMLInputElement; correct: HTMLInputElement }> = [];
+    const answersHeading = document.createElement("h3");
+    answersHeading.textContent = "Answers";
+    form.append(answersHeading);
     for (let i = 0; i < 4; i += 1) {
       const row = document.createElement("p");
       const correct = document.createElement("input");
@@ -280,6 +308,8 @@ import Layout from "../layouts/Layout.astro";
       answerRows.push({ text, correct });
     }
 
+    const actions = document.createElement("div");
+    actions.className = "progress-actions";
     const save = document.createElement("button");
     save.type = "submit";
     save.className = "new-session-button";
@@ -289,18 +319,6 @@ import Layout from "../layouts/Layout.astro";
     cancel.className = "secondary-button";
     cancel.textContent = "Cancel";
     cancel.addEventListener("click", () => authoringPanel.replaceChildren());
-
-    form.prepend(
-      document.createTextNode("Question"), document.createElement("br"), prompt,
-      document.createElement("br"), document.createTextNode("Explanation"), document.createElement("br"), explanation,
-      document.createElement("br"), document.createTextNode("Concept "), concept,
-      document.createElement("br"), document.createTextNode("Learning objective "), objective,
-      document.createElement("br"), document.createTextNode("Source "), source,
-      document.createElement("br"), document.createTextNode("Source evidence"), document.createElement("br"), evidence,
-      document.createElement("h3").appendChild(document.createTextNode("Answers")).parentNode as Node,
-    );
-    const actions = document.createElement("div");
-    actions.className = "progress-actions";
     actions.append(save, cancel);
     form.append(actions);
 
@@ -308,9 +326,10 @@ import Layout from "../layouts/Layout.astro";
       event.preventDefault();
       if (!curriculum) return;
       const correctIndex = answerRows.findIndex((item) => item.correct.checked);
-      const sourceRecord = curriculum.sources.find((item) => item.id === source.value)!;
+      const sourceRecord = curriculum.sources.find((item) => item.id === source.value);
       const objectiveRecord = curriculum.learningObjectives.find((item) => item.id === objective.value);
       const conceptRecord = curriculum.concepts.find((item) => item.id === concept.value);
+      if (!sourceRecord || correctIndex < 0) return;
       const id = `human-${Date.now()}`;
       const draft: CurriculumQuestionDraft = {
         id,
@@ -365,13 +384,14 @@ import Layout from "../layouts/Layout.astro";
     const humanApproved = drafts.filter((draft) => draft.validationStatus === "approved").length;
     const rejected = drafts.filter((draft) => draft.validationStatus === "rejected").length;
     const practiceReady = drafts.filter(isPracticeReady).length;
+    const warnings = drafts.reduce((sum, draft) => sum + (draft.qualityWarnings?.length ?? 0), 0);
 
     const heading = document.createElement("h2");
     heading.textContent = curriculum.title;
     const counts = document.createElement("p");
-    counts.textContent = `${drafts.length} total · ${practiceReady} practice ready · ${aiValidated} AI validated · ${humanApproved} human approved · ${rejected} rejected`;
+    counts.textContent = `${drafts.length} total · ${practiceReady} practice ready · ${aiValidated} AI validated · ${humanApproved} human approved · ${rejected} rejected · ${warnings} quality warning${warnings === 1 ? "" : "s"}`;
     const note = document.createElement("p");
-    note.textContent = "AI-validated questions can be used immediately. Human review changes provenance but is optional. Rejecting a question removes it from practice. Editing increments its version so earlier feedback stays attached to the old wording.";
+    note.textContent = "AI-validated questions can be used immediately. Quality warnings are non-blocking signals for author review. Human editing increments the question version so earlier feedback stays attached to the old wording.";
 
     const actions = document.createElement("div");
     actions.className = "progress-actions";
