@@ -4,8 +4,8 @@ const corsHeaders = {
 };
 
 const MODEL = "gpt-5.4-mini";
-const HARNESS_VERSION = "1.6.0";
-const PROMPT_VERSION = "2026-08-27.4";
+const HARNESS_VERSION = "1.7.0";
+const PROMPT_VERSION = "2026-08-28.1";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 
@@ -27,7 +27,13 @@ function extractOutputText(response: any): string {
   return pieces.join("");
 }
 
-async function callStructuredModel(apiKey: string, systemPrompt: string, userPrompt: string, schema: any) {
+async function callStructuredModel(
+  apiKey: string,
+  systemPrompt: string,
+  userPrompt: string,
+  schema: any,
+  schemaName: string,
+) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -43,7 +49,7 @@ async function callStructuredModel(apiKey: string, systemPrompt: string, userPro
       text: {
         format: {
           type: "json_schema",
-          name: "grounded_question_generation",
+          name: schemaName,
           strict: true,
           schema,
         },
@@ -68,6 +74,70 @@ async function callStructuredModel(apiKey: string, systemPrompt: string, userPro
   }
 }
 
+function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], conceptIds: string[]) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "id",
+      "semanticKey",
+      "prompt",
+      "answers",
+      "topic",
+      "conceptIds",
+      "masteryConcept",
+      "learningObjectiveId",
+      "difficulty",
+      "learningStage",
+      "explanation",
+      "sourceId",
+      "sourceReference",
+      "sourceEvidence",
+    ],
+    properties: {
+      id: { type: "string" },
+      semanticKey: { type: "string" },
+      prompt: { type: "string" },
+      answers: {
+        type: "array",
+        minItems: 4,
+        maxItems: 4,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "text", "correct", "feedback"],
+          properties: {
+            id: { type: "string" },
+            text: { type: "string" },
+            correct: { type: "boolean" },
+            feedback: { type: "string" },
+          },
+        },
+      },
+      topic: { type: "string" },
+      conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } },
+      masteryConcept: { type: "string", enum: conceptIds },
+      learningObjectiveId: { type: "string", enum: objectiveIds },
+      difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
+      learningStage: { type: "string", enum: ["recognition", "understanding", "application"] },
+      explanation: { type: "string" },
+      sourceId: { type: "string", enum: sourceIds },
+      sourceReference: { type: "string" },
+      sourceEvidence: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sourceId", "reference", "excerpt", "locator"],
+        properties: {
+          sourceId: { type: "string", enum: sourceIds },
+          reference: { type: "string" },
+          excerpt: { type: "string" },
+          locator: { type: "string" },
+        },
+      },
+    },
+  };
+}
+
 function normalizeDrafts(result: any, request: any, verificationTier: "classroom" | "high-assurance") {
   const sourceIds = new Set((request.curriculum?.sources ?? []).map((source: any) => source.id));
   const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((objective: any) => objective.id));
@@ -80,10 +150,28 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
     const answers = Array.isArray(raw.answers) ? raw.answers : [];
     const correctCount = answers.filter((answer: any) => answer?.correct === true).length;
     const evidence = raw.sourceEvidence;
+    const audit = Array.isArray(raw.distractorAudit) ? raw.distractorAudit : [];
+    const wrongAnswerIds = new Set(
+      answers.filter((answer: any) => answer?.correct !== true).map((answer: any) => answer?.id),
+    );
+    const auditedWrongAnswers = new Set(
+      audit
+        .filter(
+          (entry: any) =>
+            wrongAnswerIds.has(entry?.answerId) &&
+            typeof entry?.misconception === "string" &&
+            entry.misconception.trim().length >= 12 &&
+            typeof entry?.whyTempting === "string" &&
+            entry.whyTempting.trim().length >= 12,
+        )
+        .map((entry: any) => entry.answerId),
+    );
+
     const valid =
       typeof raw.prompt === "string" && raw.prompt.trim().length >= 12 &&
-      answers.length >= 3 && answers.length <= 5 &&
+      answers.length === 4 &&
       correctCount === 1 &&
+      auditedWrongAnswers.size >= 2 &&
       sourceIds.has(raw.sourceId) &&
       objectiveIds.has(raw.learningObjectiveId) &&
       conceptIds.has(raw.masteryConcept) &&
@@ -93,12 +181,13 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
 
     if (!valid) {
       rejectedCount += 1;
-      warnings.push(`Draft ${index + 1} failed deterministic grounding/shape checks and was rejected.`);
+      warnings.push(`Draft ${index + 1} failed grounding, shape, or distractor-plausibility checks and was rejected.`);
       continue;
     }
 
+    const { distractorAudit: _distractorAudit, ...cleanRaw } = raw;
     accepted.push({
-      ...raw,
+      ...cleanRaw,
       version: 1,
       type: "single-select",
       validationStatus: "ai-validated",
@@ -137,7 +226,9 @@ Deno.serve(async (req) => {
   const verificationTier = request?.verificationTier === "high-assurance" ? "high-assurance" : "classroom";
 
   if (!curriculum || !sourceText) return json({ message: "Curriculum and source text are required." }, 400);
-  if (sourceText.length > MAX_SOURCE_CHARS) return json({ message: `Source is too large for this beta (${MAX_SOURCE_CHARS} character limit).` }, 413);
+  if (sourceText.length > MAX_SOURCE_CHARS) {
+    return json({ message: `Source is too large for this beta (${MAX_SOURCE_CHARS} character limit).` }, 413);
+  }
   if (!Array.isArray(curriculum.sources) || !Array.isArray(curriculum.concepts) || !Array.isArray(curriculum.learningObjectives)) {
     return json({ message: "Curriculum structure is invalid." }, 400);
   }
@@ -145,8 +236,9 @@ Deno.serve(async (req) => {
   const sourceIds = curriculum.sources.map((source: any) => source.id);
   const objectiveIds = curriculum.learningObjectives.map((objective: any) => objective.id);
   const conceptIds = curriculum.concepts.map((concept: any) => concept.id);
+  const questionSchema = baseQuestionSchema(sourceIds, objectiveIds, conceptIds);
 
-  const schema = {
+  const generationSchema = {
     type: "object",
     additionalProperties: false,
     required: ["suitability", "message", "drafts"],
@@ -156,61 +248,54 @@ Deno.serve(async (req) => {
       drafts: {
         type: "array",
         maxItems: targetQuestionCount,
+        items: questionSchema,
+      },
+    },
+  };
+
+  const auditedQuestionSchema = {
+    ...questionSchema,
+    required: [...questionSchema.required, "distractorAudit"],
+    properties: {
+      ...questionSchema.properties,
+      distractorAudit: {
+        type: "array",
+        minItems: 3,
+        maxItems: 3,
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["id", "semanticKey", "prompt", "answers", "topic", "conceptIds", "masteryConcept", "learningObjectiveId", "difficulty", "learningStage", "explanation", "sourceId", "sourceReference", "sourceEvidence"],
+          required: ["answerId", "misconception", "whyTempting"],
           properties: {
-            id: { type: "string" },
-            semanticKey: { type: "string" },
-            prompt: { type: "string" },
-            answers: {
-              type: "array",
-              minItems: 3,
-              maxItems: 5,
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["id", "text", "correct", "feedback"],
-                properties: {
-                  id: { type: "string" },
-                  text: { type: "string" },
-                  correct: { type: "boolean" },
-                  feedback: { type: "string" },
-                },
-              },
-            },
-            topic: { type: "string" },
-            conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } },
-            masteryConcept: { type: "string", enum: conceptIds },
-            learningObjectiveId: { type: "string", enum: objectiveIds },
-            difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
-            learningStage: { type: "string", enum: ["recognition", "understanding", "application"] },
-            explanation: { type: "string" },
-            sourceId: { type: "string", enum: sourceIds },
-            sourceReference: { type: "string" },
-            sourceEvidence: {
-              type: "object",
-              additionalProperties: false,
-              required: ["sourceId", "reference", "excerpt", "locator"],
-              properties: {
-                sourceId: { type: "string", enum: sourceIds },
-                reference: { type: "string" },
-                excerpt: { type: "string" },
-                locator: { type: "string" },
-              },
-            },
+            answerId: { type: "string" },
+            misconception: { type: "string" },
+            whyTempting: { type: "string" },
           },
         },
       },
     },
   };
 
-  const tierRules = verificationTier === "high-assurance"
-    ? `High-assurance verification mode:\n- Be more conservative than normal classroom generation.\n- Generate a question only when the supplied source states or strongly entails the correct answer without relying on outside knowledge.\n- Prefer narrowly supported claims over broad generalizations.\n- Source evidence must directly support the precise distinction tested.\n- If wording in the source is ambiguous, incomplete, outdated, or insufficient, omit that question rather than resolve it yourself.\n- This is a stricter source-grounding tier, not independent external corroboration.`
-    : `Classroom verification mode:\n- Treat the supplied curriculum as the instructional authority.\n- Ground each answer and explanation directly in that curriculum.\n- This tier is appropriate for normal public educational use and optional educator review.`;
+  const reviewSchema = {
+    type: "object",
+    additionalProperties: false,
+    required: ["suitability", "message", "drafts"],
+    properties: {
+      suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
+      message: { type: "string" },
+      drafts: {
+        type: "array",
+        maxItems: targetQuestionCount,
+        items: auditedQuestionSchema,
+      },
+    },
+  };
 
-  const systemPrompt = `You are the question-generation engine for a privacy-minimizing learning app.\n\nPrimary goal: measure and strengthen genuine understanding, not test-taking acumen. Assume a bright, test-wise learner will actively look for shortcuts and answer-pattern loopholes.\n\n${tierRules}\n\nGrounding rules:\n- Use ONLY the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by a small source excerpt returned as sourceEvidence.\n- If the source does not support a defensible question, do not invent one.\n- Use exact supplied source, concept, and learning-objective IDs.\n\nLearner-facing language rules:\n- Questions must stand alone as subject-matter questions. Never ask what the curriculum, source, lesson, module, heading, author, or learning objective says or calls something unless that structure itself is the subject being taught.\n- Do not use authoring-system phrases such as \"curriculum concept\", \"according to the curriculum\", \"the source says\", \"this lesson\", \"the material describes\", or similar metadata language in the learner-facing prompt or answers.\n- Source provenance belongs in sourceEvidence and explanations, not in the wording a learner must parse to answer.\n\nDistractor quality rules:\n- Treat distractor quality as a primary acceptance criterion, not a cosmetic detail.\n- Every distractor must be a choice that a learner with incomplete knowledge could reasonably select. Build distractors from near-miss approaches, partial truths, missing constraints, common misconceptions, or inferior-but-plausible decisions.\n- Do not use obviously unrelated concepts, reckless actions, absurd statements, or category mismatches merely to fill answer slots.\n- Prefer answer sets where all options are structurally parallel: competing designs, diagnoses, actions, explanations, or definitions at similar specificity.\n- Prefer distractors that differ from the correct answer in one or two meaningful technical dimensions rather than belonging to completely different conceptual categories.\n- When the source supports a decision scenario, make the stated requirements matter. A useful test is whether changing an important requirement could plausibly change which option is best.\n- Where the source supports closely related concepts, deliberately contrast them so the learner must discriminate between them rather than recognize a keyword.\n- Before returning each question, perform two attacks. First, a partial-knowledge attack: ask whether each wrong option is genuinely tempting to someone who understands some but not all of the material. Second, a test-wise attack: ignore domain knowledge and try to solve the question using only tone, grammar, specificity, qualifier words, answer length, or one option sounding uniquely professional. If either attack exposes a weak answer set, rewrite it.\n- Do not surround one nuanced answer with categorical distractors using words such as always, never, only, every, guaranteed, must, cannot, obviously, or clearly. Such words are allowed when technically meaningful, but qualifier distribution must not reveal the answer.\n- Keep answer choices reasonably parallel in grammatical form, specificity, and length.\n- The correct answer must not systematically be the longest, safest-sounding, or most carefully qualified option.\n\nCognitive-diversity rules:\n- Prefer application, diagnosis, comparison, and transfer over pure definition recall.\n- Across a set of 8 or more questions, aim for roughly 10-20% recognition, 30-40% understanding, and 45-60% application when the source supports it.\n- A small number of straightforward recall questions is useful for reinforcement; do not make every item difficult.\n- Do not ask several questions that are merely paraphrases of the same distinction. Vary the reasoning task even when concepts repeat.\n- Where possible, combine related concepts in realistic scenarios so the learner must choose between plausible approaches rather than match vocabulary.\n- Favor scenarios where the learner must diagnose why a behavior occurs, choose among plausible next steps, evaluate tradeoffs, or transfer a concept to a new situation.\n- Quality is more important than quantity. If the source cannot support the requested number of strong, well-grounded questions with plausible distractors, return fewer questions rather than padding the set with weak items.\n\nExplanation rules:\n- Explanations should teach why the correct answer works.\n- When a distractor represents a tempting misconception, briefly explain the distinction.\n- Do not merely restate the correct option.\n\nSafety/suitability:\n- Do not convert material into procedural training that meaningfully facilitates serious physical harm, weapon construction/use, self-harm, illicit drug production, credential theft, malware deployment, sexual exploitation, or comparable wrongdoing.\n- Historical, literary, safety, defensive, scientific, and high-level educational treatment of sensitive subjects may still be suitable when the questions do not operationalize harm.\n- If the source is primarily unsuitable for question generation, return suitability=blocked and no drafts. If only portions are unsuitable, return suitability=limited and generate only safe educational questions from appropriate portions.\n\nQuestions that pass the generation harness may be used immediately by learners and remain optionally reviewable/editable by educators or authors. Human approval is not required for normal practice. Return up to the requested number of strong questions; quality is more important than hitting the count.`;
+  const tierRules = verificationTier === "high-assurance"
+    ? `High-assurance verification mode:\n- Be more conservative than normal classroom generation.\n- Generate a question only when the supplied source states or strongly entails the correct answer without relying on outside knowledge.\n- Prefer narrowly supported claims over broad generalizations.\n- Source evidence must directly support the precise distinction tested.\n- If wording in the source is ambiguous, incomplete, outdated, or insufficient, omit that question rather than resolve it yourself.\n- This is stricter source-grounding, not independent external corroboration.`
+    : `Classroom verification mode:\n- Treat the supplied curriculum as the instructional authority.\n- Ground each answer and explanation directly in that curriculum.\n- This tier is appropriate for normal educational use and optional educator review.`;
+
+  const systemPrompt = `You generate grounded multiple-choice questions for a learning app.\n\nPrimary goal: produce questions that measure genuine understanding rather than elimination skill. Assume a bright, test-wise learner.\n\n${tierRules}\n\nGrounding:\n- Use only the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by sourceEvidence.\n- If the source does not support a defensible question, omit it.\n- Use exact supplied source, concept, and objective IDs.\n\nLearner-facing language:\n- Questions must stand alone as subject-matter questions.\n- Never ask what the curriculum, lesson, source, module, heading, author, or learning objective says unless that structure is itself the subject.\n- Keep provenance in metadata, not in the prompt.\n\nQuestion design:\n- Prefer application, diagnosis, comparison, transfer, and tradeoff questions over pure recall.\n- Across sets of 8 or more, aim roughly for 10-20% recognition, 30-40% understanding, and 45-60% application when supported by the source.\n- A few straightforward recall questions are fine.\n- For scenarios, make constraints matter.\n- Prefer nearby concepts and realistic alternatives over unrelated vocabulary.\n- Keep answer choices parallel in grammar, specificity, and length.\n- Do not make one answer uniquely nuanced, professional, safe, or detailed.\n- Avoid obvious qualifier cues such as always, never, only, every, guaranteed, must, cannot, obviously, or clearly unless technically necessary.\n- Quality is more important than count; return fewer questions rather than pad.\n\nExplanations:\n- Explain why the correct answer works and, when useful, the key distinction from a tempting near miss.\n- Do not merely restate the answer.\n\nSafety:\n- Do not convert source material into procedural training that meaningfully facilitates serious wrongdoing or harm.\n- If the source is primarily unsuitable, return suitability=blocked and no drafts.`;
 
   const userPrompt = JSON.stringify({
     curriculum: {
@@ -228,7 +313,13 @@ Deno.serve(async (req) => {
 
   let result: any;
   try {
-    result = await callStructuredModel(apiKey, systemPrompt, userPrompt, schema);
+    result = await callStructuredModel(
+      apiKey,
+      systemPrompt,
+      userPrompt,
+      generationSchema,
+      "grounded_question_generation",
+    );
   } catch (error) {
     return json({ message: error instanceof Error ? error.message : "Question generation failed." }, 502);
   }
@@ -246,7 +337,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const reviewerPrompt = `You are the adversarial assessment editor for a learning app. You are reviewing machine-generated multiple-choice questions after a first generation pass.\n\nYour job is NOT to preserve question count. Delete weak questions. Rewrite mediocre questions. Keep only questions that provide useful evidence of understanding.\n\nFor every retained question:\n- Verify the correct answer is directly supported by the supplied source evidence and source text.\n- Independently inspect every distractor. A distractor is acceptable only if a learner with partial knowledge could reasonably choose it.\n- Reject or rewrite distractors that are absurd, reckless, obviously irrelevant, category-mismatched, merely the opposite of the correct answer, or obviously wrong from ordinary common sense.\n- Prefer parallel options that differ in one or two meaningful technical dimensions.\n- For scenarios, make all choices plausible actions or designs and make the stated constraints determine the best answer.\n- Try to answer the question without subject knowledge using wording, professionalism, length, qualifiers, safety, or tone. If possible, rewrite it.\n- Do not praise a distractor as plausible unless it actually is.\n- Preserve the original id and semanticKey for retained questions. Preserve sourceId, learningObjectiveId, masteryConcept, and conceptIds unless a correction is required by the supplied curriculum IDs.\n- You may rewrite the prompt, answer texts, feedback, explanation, difficulty, or learningStage.\n- Return fewer questions when the source cannot support enough strong items.\n\nA strong benchmark is that at least two wrong options should remain genuinely tempting until the learner applies the concept or scenario constraint. The goal is not to imitate any particular exam wording; it is to measure understanding rather than elimination skill.`;
+  const reviewerPrompt = `You are the adversarial distractor designer and assessment editor for a learning app.\n\nThe first pass has already created candidate questions. Your task is to rebuild weak answer sets from explicit misconception models. You are not required to preserve question count.\n\nFor EACH retained question, follow this process internally before writing the final choices:\n1. Identify the exact knowledge or reasoning step required for the correct answer.\n2. Invent at least three distinct partial-knowledge models a learner could hold. Each model must be a concrete mistaken rule, omitted constraint, overgeneralization, nearby-concept confusion, or inferior-but-plausible decision.\n3. Turn those models into three distractors.\n4. For each distractor, return a distractorAudit entry that states the misconception and why a partially informed learner might choose it.\n5. If you cannot produce at least TWO genuinely plausible misconceptions without leaving the supplied source's conceptual scope, DELETE THE QUESTION.\n\nHard rejection rules:\n- Reject distractors that are jokes, absurd, reckless, obviously irrelevant, category-mismatched, or wrong by ordinary common sense.\n- Reject distractors whose only rationale is that the learner 'does not know the definition,' 'might guess it,' or that the option merely 'sounds plausible.' The misconception must be specific.\n- Reject answer sets where the correct option is uniquely longer, more nuanced, safer, more professional, or more carefully qualified.\n- Reject qualifier asymmetry where several wrong answers contain words like always, never, only, every, guaranteed, must, cannot, obviously, or clearly while the correct answer does not.\n- Reject scenarios where one option obviously follows the stated requirement and the others ignore the scenario entirely. Competing options should each honor most of the scenario while failing on a subtle but meaningful dimension.\n\nPreferred distractor patterns:\n- correct principle applied to the wrong constraint;\n- correct concept confused with a nearby concept;\n- partially correct action that omits one necessary requirement;\n- valid approach that optimizes the wrong tradeoff;\n- reasonable default applied where an exception changes the answer;\n- right service or design pattern used at the wrong scope.\n\nBenchmark:\nA learner with partial knowledge should have to compare at least two plausible wrong choices with the correct answer. If ordinary test-taking technique can remove most of the options, rewrite or delete the item.\n\nPreserve grounding and exact IDs. You may rewrite prompts, answer text, feedback, explanations, difficulty, and learningStage. Preserve id and semanticKey for retained questions. Return fewer questions if needed.`;
 
   const reviewerUserPrompt = JSON.stringify({
     curriculum: {
@@ -262,16 +353,31 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const reviewed = await callStructuredModel(apiKey, reviewerPrompt, reviewerUserPrompt, schema);
-    if (Array.isArray(reviewed?.drafts) && reviewed.drafts.length > 0) {
-      result = {
-        ...reviewed,
-        suitability: reviewed.suitability || result.suitability,
-        message: reviewed.message || result.message,
-      };
-    }
+    const reviewed = await callStructuredModel(
+      apiKey,
+      reviewerPrompt,
+      reviewerUserPrompt,
+      reviewSchema,
+      "misconception_audited_questions",
+    );
+    result = {
+      ...reviewed,
+      suitability: reviewed.suitability || result.suitability,
+      message: reviewed.message || result.message,
+    };
   } catch (error) {
-    console.error("Adversarial review pass failed; using first-pass drafts.", error);
+    console.error("Misconception audit failed; rejecting first-pass drafts instead of silently falling back.", error);
+    return json({
+      ok: false,
+      drafts: [],
+      rejectedCount: Array.isArray(result?.drafts) ? result.drafts.length : 0,
+      warnings: ["The distractor-quality audit failed, so first-pass questions were not accepted."],
+      suitability: result.suitability,
+      message: "Question generation completed, but the distractor-quality audit failed. Please try again.",
+      provider: "openai",
+      model: MODEL,
+      verificationTier,
+    }, 502);
   }
 
   const normalized = normalizeDrafts(result, request, verificationTier);
