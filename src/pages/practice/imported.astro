@@ -11,6 +11,10 @@ import Layout from "../../layouts/Layout.astro";
             <a href="/progress">View progress</a>
         </div>
         <h1>Imported curriculum practice</h1>
+        <div class="progress-actions">
+            <button id="export-questions-md" class="secondary-button" type="button">Export questions (.md)</button>
+            <button id="export-questions-json" class="secondary-button" type="button">Export questions (.json)</button>
+        </div>
         <section id="curriculum-info" class="progress-summary"><p>Loading saved curriculum…</p></section>
         <section id="runtime-question" class="progress-summary"></section>
         <div id="runtime-actions" class="practice-actions" hidden>
@@ -47,6 +51,8 @@ import Layout from "../../layouts/Layout.astro";
     const complete = document.querySelector<HTMLElement>("#runtime-complete");
     const finalScore = document.querySelector<HTMLElement>("#runtime-score");
     const finalTotal = document.querySelector<HTMLElement>("#runtime-total");
+    const exportMarkdown = document.querySelector<HTMLButtonElement>("#export-questions-md");
+    const exportJson = document.querySelector<HTMLButtonElement>("#export-questions-json");
 
     const shuffle = <T,>(items: T[]): T[] => {
         const copy = [...items];
@@ -55,6 +61,23 @@ import Layout from "../../layouts/Layout.astro";
             [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
         }
         return copy;
+    };
+
+    const slugify = (value: string) => value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "curriculum";
+
+    const downloadText = (filename: string, content: string, type: string) => {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
     };
 
     const stored = readImportedCurriculum();
@@ -69,6 +92,62 @@ import Layout from "../../layouts/Layout.astro";
     let current = 0;
     let score = 0;
     let answered = false;
+
+    exportMarkdown?.addEventListener("click", () => {
+        if (!stored) return;
+        const drafts = stored.curriculum.questionDrafts;
+        const lines: string[] = [
+            `# ${stored.curriculum.title}`,
+            "",
+            `${drafts.length} generated/reviewable questions`,
+            "",
+        ];
+
+        drafts.forEach((draft, index) => {
+            const meta = [
+                draft.validationStatus,
+                draft.authorship,
+                draft.learningStage,
+                draft.difficulty,
+                draft.generation?.harnessVersion ? `Harness ${draft.generation.harnessVersion}` : undefined,
+            ].filter(Boolean).join(" · ");
+            lines.push(`## ${index + 1}. ${draft.prompt}`, "", meta, "");
+            draft.answers.forEach((answer) => {
+                lines.push(`- ${answer.correct ? "**✓ " : ""}${answer.text}${answer.correct ? "**" : ""}`);
+            });
+            lines.push("", `**Explanation:** ${draft.explanation}`, "");
+            if (draft.qualityWarnings?.length) {
+                lines.push("**Quality warnings:**");
+                draft.qualityWarnings.forEach((warning) => lines.push(`- ${warning.message}`));
+                lines.push("");
+            }
+            if (draft.sourceEvidence?.excerpt) {
+                lines.push(
+                    "**Source evidence**",
+                    "",
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    "",
+                    `> ${draft.sourceEvidence.excerpt.replace(/\n/g, "\n> ")}`,
+                    "",
+                );
+            }
+        });
+
+        downloadText(
+            `${slugify(stored.curriculum.title)}-questions.md`,
+            lines.join("\n"),
+            "text/markdown;charset=utf-8",
+        );
+    });
+
+    exportJson?.addEventListener("click", () => {
+        if (!stored) return;
+        downloadText(
+            `${slugify(stored.curriculum.title)}-questions.json`,
+            JSON.stringify(stored.curriculum, null, 2),
+            "application/json;charset=utf-8",
+        );
+    });
 
     const setInfo = (titleText: string, bodyText: string) => {
         if (!info) return;
