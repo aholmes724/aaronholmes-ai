@@ -1,8 +1,8 @@
 import type { CurriculumPackage, CurriculumQuestionDraft, QuestionQualityWarning } from "./types";
 import { validateCurriculumPackage } from "./validate";
 
-export const GENERATION_HARNESS_VERSION = "1.7.0";
-export const GENERATION_PROMPT_VERSION = "2026-08-28.1";
+export const GENERATION_HARNESS_VERSION = "1.8.0";
+export const GENERATION_PROMPT_VERSION = "2026-08-28.2";
 
 export interface HarnessIssue {
     questionId?: string;
@@ -19,150 +19,46 @@ export interface HarnessResult {
 
 const giveawayQualifier = /\b(always|never|only|every|guaranteed|obviously|clearly|must|cannot)\b/i;
 
-function warning(code: string, message: string): QuestionQualityWarning {
-    return { code, message };
-}
+function warning(code: string, message: string): QuestionQualityWarning { return { code, message }; }
 
-export function validateGeneratedDrafts(
-    curriculum: CurriculumPackage,
-    drafts: CurriculumQuestionDraft[],
-): HarnessResult {
-    const issues: HarnessIssue[] = [];
-    const accepted: CurriculumQuestionDraft[] = [];
-    const rejected: CurriculumQuestionDraft[] = [];
-
+export function validateGeneratedDrafts(curriculum: CurriculumPackage, drafts: CurriculumQuestionDraft[]): HarnessResult {
+    const issues: HarnessIssue[] = [], accepted: CurriculumQuestionDraft[] = [], rejected: CurriculumQuestionDraft[] = [];
     for (const draft of drafts) {
-        const draftIssues: HarnessIssue[] = [];
-        const qualityWarnings: QuestionQualityWarning[] = [];
+        const draftIssues: HarnessIssue[] = [], qualityWarnings: QuestionQualityWarning[] = [];
         const correctAnswers = draft.answers.filter((answer) => answer.correct);
         const wrongAnswers = draft.answers.filter((answer) => !answer.correct);
-
-        if (!draft.sourceEvidence?.excerpt?.trim()) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "error",
-                code: "missing-source-evidence",
-                message: "Generated questions require a supporting source excerpt.",
-            });
-        }
-
-        if (draft.sourceEvidence && draft.sourceEvidence.sourceId !== draft.sourceId) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "error",
-                code: "source-mismatch",
-                message: "Source evidence must reference the same source as the question.",
-            });
-        }
-
-        if (draft.answers.length !== 4) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "error",
-                code: "invalid-answer-count",
-                message: "Generated questions must have exactly four answer choices in Harness 1.7.",
-            });
-        }
-
-        if (draft.type === "single-select" && correctAnswers.length !== 1) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "error",
-                code: "invalid-correct-count",
-                message: "Single-select generated questions must have exactly one correct answer.",
-            });
-        }
-
+        if (!draft.sourceEvidence?.excerpt?.trim()) draftIssues.push({ questionId: draft.id, severity: "error", code: "missing-source-evidence", message: "Generated questions require a supporting source excerpt." });
+        if (draft.sourceEvidence && draft.sourceEvidence.sourceId !== draft.sourceId) draftIssues.push({ questionId: draft.id, severity: "error", code: "source-mismatch", message: "Source evidence must reference the same source as the question." });
+        if (draft.answers.length !== 4) draftIssues.push({ questionId: draft.id, severity: "error", code: "invalid-answer-count", message: "Generated questions must have exactly four answer choices in Harness 1.8." });
+        if (draft.type === "single-select" && correctAnswers.length !== 1) draftIssues.push({ questionId: draft.id, severity: "error", code: "invalid-correct-count", message: "Single-select generated questions must have exactly one correct answer." });
         const correctLength = correctAnswers[0]?.text.trim().length ?? 0;
         const wrongLengths = wrongAnswers.map((answer) => answer.text.trim().length);
-        const averageWrongLength = wrongLengths.length
-            ? wrongLengths.reduce((sum, length) => sum + length, 0) / wrongLengths.length
-            : 0;
-
-        if (
-            averageWrongLength > 0 &&
-            correctLength > averageWrongLength * 1.55 &&
-            correctLength - averageWrongLength > 18
-        ) {
-            const item = warning(
-                "correct-answer-length-cue",
-                "The correct answer is substantially more detailed than the distractors and may be guessable by answer length.",
-            );
-            qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
+        const averageWrongLength = wrongLengths.length ? wrongLengths.reduce((sum, length) => sum + length, 0) / wrongLengths.length : 0;
+        if (averageWrongLength > 0 && correctLength > averageWrongLength * 1.55 && correctLength - averageWrongLength > 18) {
+            const item = warning("correct-answer-length-cue", "The correct answer is substantially more detailed than the distractors and may be guessable by answer length."); qualityWarnings.push(item); draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
-
         const qualifierWrongAnswers = wrongAnswers.filter((answer) => giveawayQualifier.test(answer.text)).length;
         const qualifierCorrectAnswers = correctAnswers.filter((answer) => giveawayQualifier.test(answer.text)).length;
         if (qualifierWrongAnswers >= 2 && qualifierCorrectAnswers === 0) {
-            const item = warning(
-                "qualifier-asymmetry",
-                "Multiple distractors use absolute or categorical qualifiers while the correct answer is more nuanced; a test-wise learner may infer the answer without knowing the material.",
-            );
-            qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
+            const item = warning("qualifier-asymmetry", "Multiple distractors use absolute or categorical qualifiers while the correct answer is more nuanced; a test-wise learner may infer the answer without knowing the material."); qualityWarnings.push(item); draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
-
-        const answerWordCounts = draft.answers.map((answer) =>
-            answer.text.trim().split(/\s+/).filter(Boolean).length,
-        );
-        const minWords = Math.min(...answerWordCounts);
-        const maxWords = Math.max(...answerWordCounts);
+        const answerWordCounts = draft.answers.map((answer) => answer.text.trim().split(/\s+/).filter(Boolean).length);
+        const minWords = Math.min(...answerWordCounts), maxWords = Math.max(...answerWordCounts);
         const correctWordCount = correctAnswers[0]?.text.trim().split(/\s+/).filter(Boolean).length ?? 0;
         if (maxWords >= Math.max(8, minWords * 2.6) && correctWordCount === maxWords) {
-            const item = warning(
-                "answer-shape-asymmetry",
-                "The correct option has a noticeably different shape or level of detail from the alternatives.",
-            );
-            qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
+            const item = warning("answer-shape-asymmetry", "The correct option has a noticeably different shape or level of detail from the alternatives."); qualityWarnings.push(item); draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
-
         if (draft.learningStage === "recognition" && draft.difficulty !== "beginner") {
-            const item = warning(
-                "recognition-difficulty-mismatch",
-                "This question is labeled above beginner difficulty but still tests recognition; consider a scenario, diagnosis, or transfer task instead.",
-            );
-            qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+            const item = warning("recognition-difficulty-mismatch", "This question is labeled above beginner difficulty but still tests recognition; consider a scenario, diagnosis, or transfer task instead."); qualityWarnings.push(item); draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
         }
-
-        if (!draft.explanation?.trim() || draft.explanation.trim().length < 30) {
-            draftIssues.push({
-                questionId: draft.id,
-                severity: "error",
-                code: "weak-explanation",
-                message: "Generated questions need a meaningful explanation, not just the answer label.",
-            });
-        }
-
+        if (!draft.explanation?.trim() || draft.explanation.trim().length < 30) draftIssues.push({ questionId: draft.id, severity: "error", code: "weak-explanation", message: "Generated questions need a meaningful explanation, not just the answer label." });
         issues.push(...draftIssues);
-        if (draftIssues.some((issue) => issue.severity === "error")) {
-            rejected.push(draft);
-        } else {
-            accepted.push({
-                ...draft,
-                qualityWarnings: qualityWarnings.length ? qualityWarnings : undefined,
-            });
-        }
+        if (draftIssues.some((issue) => issue.severity === "error")) rejected.push(draft);
+        else accepted.push({ ...draft, qualityWarnings: qualityWarnings.length ? qualityWarnings : undefined });
     }
-
-    const candidate: CurriculumPackage = {
-        ...curriculum,
-        questionDrafts: accepted,
-    };
+    const candidate: CurriculumPackage = { ...curriculum, questionDrafts: accepted };
     const packageValidation = validateCurriculumPackage(candidate);
-    packageValidation.issues.forEach((issue) => {
-        issues.push({
-            severity: "error",
-            code: "curriculum-validation",
-            message: `${issue.path}: ${issue.message}`,
-        });
-    });
-
-    if (!packageValidation.valid) {
-        return { accepted: [], rejected: [...rejected, ...accepted], issues };
-    }
-
+    packageValidation.issues.forEach((issue) => issues.push({ severity: "error", code: "curriculum-validation", message: `${issue.path}: ${issue.message}` }));
+    if (!packageValidation.valid) return { accepted: [], rejected: [...rejected, ...accepted], issues };
     return { accepted, rejected, issues };
 }
