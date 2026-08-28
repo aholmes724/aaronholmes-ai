@@ -20,7 +20,6 @@ import Layout from "../layouts/Layout.astro";
                 </select>
             </p>
             <p><small>High assurance is stricter source-grounding, not independent external fact-checking. Optional educator review is available after generation.</small></p>
-            <div class="progress-actions"><button id="load-sample" class="secondary-button" type="button">Load sample package</button></div>
         </section>
 
         <section id="import-result" class="progress-summary" aria-live="polite">
@@ -33,7 +32,6 @@ import Layout from "../layouts/Layout.astro";
 <script>
     import type { CurriculumPackage, VerificationTier } from "../data/curriculum/types";
     import { parseCurriculumJson, summarizeCurriculum } from "../data/curriculum/importer";
-    import { sampleCurriculum } from "../data/curriculum/sample";
     import { saveImportedCurriculum } from "../data/curriculum/storage";
     import { ingestTextSource } from "../data/curriculum/source-ingestion";
     import { createQuestionGenerationRequest } from "../data/curriculum/generation-contract";
@@ -41,7 +39,6 @@ import Layout from "../layouts/Layout.astro";
     import { validateGeneratedDrafts } from "../data/curriculum/generation-harness";
 
     const input = document.querySelector<HTMLInputElement>("#curriculum-file");
-    const sampleButton = document.querySelector<HTMLButtonElement>("#load-sample");
     const verificationSelect = document.querySelector<HTMLSelectElement>("#verification-tier");
     const result = document.querySelector<HTMLElement>("#import-result");
     let pendingCurriculum: CurriculumPackage | null = null;
@@ -145,7 +142,8 @@ import Layout from "../layouts/Layout.astro";
 
                     const rejectedCount = generated.rejectedCount + harness.rejected.length;
                     const warningCount = generated.warnings.length + harness.issues.filter((issue) => issue.severity === "warning").length;
-                    const message = `${practiceReadyDrafts.length} question${practiceReadyDrafts.length === 1 ? "" : "s"} passed AI grounding and quality checks and are ready for practice.` +
+                    const questionVerb = practiceReadyDrafts.length === 1 ? "is" : "are";
+                    const message = `${practiceReadyDrafts.length} question${practiceReadyDrafts.length === 1 ? "" : "s"} passed AI grounding and quality checks and ${questionVerb} ready for practice.` +
                         (rejectedCount ? ` ${rejectedCount} draft${rejectedCount === 1 ? " was" : "s were"} rejected.` : "") +
                         (warningCount ? ` ${warningCount} non-blocking quality warning${warningCount === 1 ? " remains" : "s remain"}.` : "") +
                         " Review or editing is optional.";
@@ -251,5 +249,4 @@ import Layout from "../layouts/Layout.astro";
     verificationSelect?.addEventListener("change", () => {
         if (pendingCurriculum) renderPackage(pendingCurriculum, pendingSourceText, pendingSourceSummary);
     });
-    sampleButton?.addEventListener("click", () => renderJson(JSON.stringify(sampleCurriculum)));
 </script>
