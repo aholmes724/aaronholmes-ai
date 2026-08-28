@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const MODEL = "gpt-5.4-mini";
-const HARNESS_VERSION = "1.8.0";
+const HARNESS_VERSION = "1.8.1";
 const PROMPT_VERSION = "2026-08-28.2";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
@@ -20,8 +20,10 @@ function extractOutputText(response: any): string {
   return pieces.join("");
 }
 
-async function callStructuredModel(apiKey: string, systemPrompt: string, userPrompt: string, schema: any, schemaName: string) {
-  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], text: { format: { type: "json_schema", name: schemaName, strict: true, schema } } }) });
+async function callStructuredModel(apiKey: string, systemPrompt: string, userPrompt: string, schema: any, schemaName: string, reasoningEffort?: "low" | "medium" | "high" | "xhigh") {
+  const payload: any = { model: MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], text: { format: { type: "json_schema", name: schemaName, strict: true, schema } } };
+  if (reasoningEffort) payload.reasoning = { effort: reasoningEffort };
+  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) { const detail = await response.text(); console.error("OpenAI generation failed", response.status, detail); throw new Error(`Model generation failed (${response.status}).`); }
   const outputText = extractOutputText(await response.json());
   if (!outputText) throw new Error("The model returned no structured output.");
@@ -74,7 +76,7 @@ Deno.serve(async (req) => {
   let pools: any; try { pools = await callStructuredModel(apiKey, poolPrompt, JSON.stringify({ sourceText, questions: result.drafts }), poolSchema, "distractor_candidate_pools"); } catch { return json({ message: "Distractor candidate generation failed; no first-pass questions were accepted." }, 502); }
 
   const scorePrompt = `You are a skeptical assessment psychometrics reviewer. Score each candidate WITHOUT rewriting it. Plausibility 5 means a substantially-but-incompletely informed learner could sincerely choose it; 1 means absurd, irrelevant, or common-sense wrong. Parallelism 5 means same conceptual level, grammar, specificity, and length as the correct answer. Test-wise resistance 5 means no easy elimination cue. Be harsh and score the actual answer text, not its claimed rationale.`;
-  let scores: any; try { scores = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: result.drafts, pools: pools.pools }), scoreSchema, "distractor_candidate_scores"); } catch { return json({ message: "Distractor scoring failed; no questions were accepted." }, 502); }
+  let scores: any; try { scores = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: result.drafts, pools: pools.pools }), scoreSchema, "distractor_candidate_scores", "high"); } catch { return json({ message: "Distractor scoring failed; no questions were accepted." }, 502); }
 
   const scoreMap = new Map((scores.questions ?? []).map((q: any) => [q.questionId, q.candidates])); const poolMap = new Map((pools.pools ?? []).map((p: any) => [p.questionId, p.candidates])); const qualified: any[] = [];
   for (const draft of result.drafts ?? []) { const scored: any[] = (scoreMap.get(draft.id) ?? []).filter((c: any) => c.plausibility >= 4 && c.parallelism >= 4 && c.testWiseResistance >= 4); const originals: any[] = poolMap.get(draft.id) ?? []; const selected = scored.slice(0, 5).map((s: any) => ({ ...s, misconception: originals.find((o: any) => o.text === s.text)?.misconception ?? "", whyTempting: originals.find((o: any) => o.text === s.text)?.whyTempting ?? "" })); if (selected.length >= 3) qualified.push({ draft, qualifiedDistractors: selected }); }
