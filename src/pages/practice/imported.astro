@@ -48,8 +48,22 @@ import Layout from "../../layouts/Layout.astro";
     const finalScore = document.querySelector<HTMLElement>("#runtime-score");
     const finalTotal = document.querySelector<HTMLElement>("#runtime-total");
 
+    const shuffle = <T,>(items: T[]): T[] => {
+        const copy = [...items];
+        for (let index = copy.length - 1; index > 0; index -= 1) {
+            const swapIndex = Math.floor(Math.random() * (index + 1));
+            [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+        }
+        return copy;
+    };
+
     const stored = readImportedCurriculum();
-    const questions = readImportedQuestions();
+    const questions = readImportedQuestions().map((question) => ({
+        ...question,
+        answers: question.shuffleAnswers === false
+            ? question.answers
+            : shuffle(question.answers),
+    }));
     const sessionId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
     let current = 0;
