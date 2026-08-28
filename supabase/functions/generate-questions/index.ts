@@ -4,8 +4,8 @@ const corsHeaders = {
 };
 
 const MODEL = "gpt-5.4-mini";
-const HARNESS_VERSION = "1.5.0";
-const PROMPT_VERSION = "2026-08-27.3";
+const HARNESS_VERSION = "1.6.0";
+const PROMPT_VERSION = "2026-08-27.4";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 
@@ -25,6 +25,47 @@ function extractOutputText(response: any): string {
     }
   }
   return pieces.join("");
+}
+
+async function callStructuredModel(apiKey: string, systemPrompt: string, userPrompt: string, schema: any) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "grounded_question_generation",
+          strict: true,
+          schema,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    console.error("OpenAI generation failed", response.status, detail);
+    throw new Error(`Model generation failed (${response.status}).`);
+  }
+
+  const payload = await response.json();
+  const outputText = extractOutputText(payload);
+  if (!outputText) throw new Error("The model returned no structured output.");
+
+  try {
+    return JSON.parse(outputText);
+  } catch {
+    throw new Error("The model returned invalid structured output.");
+  }
 }
 
 function normalizeDrafts(result: any, request: any, verificationTier: "classroom" | "high-assurance") {
@@ -120,16 +161,45 @@ Deno.serve(async (req) => {
           additionalProperties: false,
           required: ["id", "semanticKey", "prompt", "answers", "topic", "conceptIds", "masteryConcept", "learningObjectiveId", "difficulty", "learningStage", "explanation", "sourceId", "sourceReference", "sourceEvidence"],
           properties: {
-            id: { type: "string" }, semanticKey: { type: "string" }, prompt: { type: "string" },
-            answers: { type: "array", minItems: 3, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["id", "text", "correct", "feedback"], properties: { id: { type: "string" }, text: { type: "string" }, correct: { type: "boolean" }, feedback: { type: "string" } } } },
+            id: { type: "string" },
+            semanticKey: { type: "string" },
+            prompt: { type: "string" },
+            answers: {
+              type: "array",
+              minItems: 3,
+              maxItems: 5,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "text", "correct", "feedback"],
+                properties: {
+                  id: { type: "string" },
+                  text: { type: "string" },
+                  correct: { type: "boolean" },
+                  feedback: { type: "string" },
+                },
+              },
+            },
             topic: { type: "string" },
             conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } },
             masteryConcept: { type: "string", enum: conceptIds },
             learningObjectiveId: { type: "string", enum: objectiveIds },
             difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
             learningStage: { type: "string", enum: ["recognition", "understanding", "application"] },
-            explanation: { type: "string" }, sourceId: { type: "string", enum: sourceIds }, sourceReference: { type: "string" },
-            sourceEvidence: { type: "object", additionalProperties: false, required: ["sourceId", "reference", "excerpt", "locator"], properties: { sourceId: { type: "string", enum: sourceIds }, reference: { type: "string" }, excerpt: { type: "string" }, locator: { type: "string" } } },
+            explanation: { type: "string" },
+            sourceId: { type: "string", enum: sourceIds },
+            sourceReference: { type: "string" },
+            sourceEvidence: {
+              type: "object",
+              additionalProperties: false,
+              required: ["sourceId", "reference", "excerpt", "locator"],
+              properties: {
+                sourceId: { type: "string", enum: sourceIds },
+                reference: { type: "string" },
+                excerpt: { type: "string" },
+                locator: { type: "string" },
+              },
+            },
           },
         },
       },
@@ -142,20 +212,78 @@ Deno.serve(async (req) => {
 
   const systemPrompt = `You are the question-generation engine for a privacy-minimizing learning app.\n\nPrimary goal: measure and strengthen genuine understanding, not test-taking acumen. Assume a bright, test-wise learner will actively look for shortcuts and answer-pattern loopholes.\n\n${tierRules}\n\nGrounding rules:\n- Use ONLY the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by a small source excerpt returned as sourceEvidence.\n- If the source does not support a defensible question, do not invent one.\n- Use exact supplied source, concept, and learning-objective IDs.\n\nLearner-facing language rules:\n- Questions must stand alone as subject-matter questions. Never ask what the curriculum, source, lesson, module, heading, author, or learning objective says or calls something unless that structure itself is the subject being taught.\n- Do not use authoring-system phrases such as \"curriculum concept\", \"according to the curriculum\", \"the source says\", \"this lesson\", \"the material describes\", or similar metadata language in the learner-facing prompt or answers.\n- Source provenance belongs in sourceEvidence and explanations, not in the wording a learner must parse to answer.\n\nDistractor quality rules:\n- Treat distractor quality as a primary acceptance criterion, not a cosmetic detail.\n- Every distractor must be a choice that a learner with incomplete knowledge could reasonably select. Build distractors from near-miss approaches, partial truths, missing constraints, common misconceptions, or inferior-but-plausible decisions.\n- Do not use obviously unrelated concepts, reckless actions, absurd statements, or category mismatches merely to fill answer slots.\n- Prefer answer sets where all options are structurally parallel: competing designs, diagnoses, actions, explanations, or definitions at similar specificity.\n- Prefer distractors that differ from the correct answer in one or two meaningful technical dimensions rather than belonging to completely different conceptual categories.\n- When the source supports a decision scenario, make the stated requirements matter. A useful test is whether changing an important requirement could plausibly change which option is best.\n- Where the source supports closely related concepts, deliberately contrast them so the learner must discriminate between them rather than recognize a keyword.\n- Before returning each question, perform two attacks. First, a partial-knowledge attack: ask whether each wrong option is genuinely tempting to someone who understands some but not all of the material. Second, a test-wise attack: ignore domain knowledge and try to solve the question using only tone, grammar, specificity, qualifier words, answer length, or one option sounding uniquely professional. If either attack exposes a weak answer set, rewrite it.\n- Do not surround one nuanced answer with categorical distractors using words such as always, never, only, every, guaranteed, must, cannot, obviously, or clearly. Such words are allowed when technically meaningful, but qualifier distribution must not reveal the answer.\n- Keep answer choices reasonably parallel in grammatical form, specificity, and length.\n- The correct answer must not systematically be the longest, safest-sounding, or most carefully qualified option.\n\nCognitive-diversity rules:\n- Prefer application, diagnosis, comparison, and transfer over pure definition recall.\n- Across a set of 8 or more questions, aim for roughly 10-20% recognition, 30-40% understanding, and 45-60% application when the source supports it.\n- A small number of straightforward recall questions is useful for reinforcement; do not make every item difficult.\n- Do not ask several questions that are merely paraphrases of the same distinction. Vary the reasoning task even when concepts repeat.\n- Where possible, combine related concepts in realistic scenarios so the learner must choose between plausible approaches rather than match vocabulary.\n- Favor scenarios where the learner must diagnose why a behavior occurs, choose among plausible next steps, evaluate tradeoffs, or transfer a concept to a new situation.\n- Quality is more important than quantity. If the source cannot support the requested number of strong, well-grounded questions with plausible distractors, return fewer questions rather than padding the set with weak items.\n\nExplanation rules:\n- Explanations should teach why the correct answer works.\n- When a distractor represents a tempting misconception, briefly explain the distinction.\n- Do not merely restate the correct option.\n\nSafety/suitability:\n- Do not convert material into procedural training that meaningfully facilitates serious physical harm, weapon construction/use, self-harm, illicit drug production, credential theft, malware deployment, sexual exploitation, or comparable wrongdoing.\n- Historical, literary, safety, defensive, scientific, and high-level educational treatment of sensitive subjects may still be suitable when the questions do not operationalize harm.\n- If the source is primarily unsuitable for question generation, return suitability=blocked and no drafts. If only portions are unsuitable, return suitability=limited and generate only safe educational questions from appropriate portions.\n\nQuestions that pass the generation harness may be used immediately by learners and remain optionally reviewable/editable by educators or authors. Human approval is not required for normal practice. Return up to the requested number of strong questions; quality is more important than hitting the count.`;
 
-  const userPrompt = JSON.stringify({ curriculum: { id: curriculum.id, title: curriculum.title, sources: curriculum.sources, concepts: curriculum.concepts, learningObjectives: curriculum.learningObjectives }, targetQuestionCount, verificationTier, qualityGuidance: request.qualityGuidance ?? [], sourceText });
-
-  const openAiResponse = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], text: { format: { type: "json_schema", name: "grounded_question_generation", strict: true, schema } } }) });
-
-  if (!openAiResponse.ok) { const detail = await openAiResponse.text(); console.error("OpenAI generation failed", openAiResponse.status, detail); return json({ message: `Model generation failed (${openAiResponse.status}).` }, 502); }
-  const modelResponse = await openAiResponse.json();
-  const outputText = extractOutputText(modelResponse);
-  if (!outputText) return json({ message: "The model returned no structured output." }, 502);
+  const userPrompt = JSON.stringify({
+    curriculum: {
+      id: curriculum.id,
+      title: curriculum.title,
+      sources: curriculum.sources,
+      concepts: curriculum.concepts,
+      learningObjectives: curriculum.learningObjectives,
+    },
+    targetQuestionCount,
+    verificationTier,
+    qualityGuidance: request.qualityGuidance ?? [],
+    sourceText,
+  });
 
   let result: any;
-  try { result = JSON.parse(outputText); } catch { return json({ message: "The model returned invalid structured output." }, 502); }
+  try {
+    result = await callStructuredModel(apiKey, systemPrompt, userPrompt, schema);
+  } catch (error) {
+    return json({ message: error instanceof Error ? error.message : "Question generation failed." }, 502);
+  }
 
-  if (result.suitability === "blocked") return json({ ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked", message: result.message || "This material is not suitable for generated practice.", provider: "openai", model: MODEL });
+  if (result.suitability === "blocked") {
+    return json({
+      ok: false,
+      drafts: [],
+      rejectedCount: 0,
+      warnings: [],
+      suitability: "blocked",
+      message: result.message || "This material is not suitable for generated practice.",
+      provider: "openai",
+      model: MODEL,
+    });
+  }
+
+  const reviewerPrompt = `You are the adversarial assessment editor for a learning app. You are reviewing machine-generated multiple-choice questions after a first generation pass.\n\nYour job is NOT to preserve question count. Delete weak questions. Rewrite mediocre questions. Keep only questions that provide useful evidence of understanding.\n\nFor every retained question:\n- Verify the correct answer is directly supported by the supplied source evidence and source text.\n- Independently inspect every distractor. A distractor is acceptable only if a learner with partial knowledge could reasonably choose it.\n- Reject or rewrite distractors that are absurd, reckless, obviously irrelevant, category-mismatched, merely the opposite of the correct answer, or obviously wrong from ordinary common sense.\n- Prefer parallel options that differ in one or two meaningful technical dimensions.\n- For scenarios, make all choices plausible actions or designs and make the stated constraints determine the best answer.\n- Try to answer the question without subject knowledge using wording, professionalism, length, qualifiers, safety, or tone. If possible, rewrite it.\n- Do not praise a distractor as plausible unless it actually is.\n- Preserve the original id and semanticKey for retained questions. Preserve sourceId, learningObjectiveId, masteryConcept, and conceptIds unless a correction is required by the supplied curriculum IDs.\n- You may rewrite the prompt, answer texts, feedback, explanation, difficulty, or learningStage.\n- Return fewer questions when the source cannot support enough strong items.\n\nA strong benchmark is that at least two wrong options should remain genuinely tempting until the learner applies the concept or scenario constraint. The goal is not to imitate any particular exam wording; it is to measure understanding rather than elimination skill.`;
+
+  const reviewerUserPrompt = JSON.stringify({
+    curriculum: {
+      id: curriculum.id,
+      title: curriculum.title,
+      sources: curriculum.sources,
+      concepts: curriculum.concepts,
+      learningObjectives: curriculum.learningObjectives,
+    },
+    verificationTier,
+    sourceText,
+    draftsToAudit: result.drafts ?? [],
+  });
+
+  try {
+    const reviewed = await callStructuredModel(apiKey, reviewerPrompt, reviewerUserPrompt, schema);
+    if (Array.isArray(reviewed?.drafts) && reviewed.drafts.length > 0) {
+      result = {
+        ...reviewed,
+        suitability: reviewed.suitability || result.suitability,
+        message: reviewed.message || result.message,
+      };
+    }
+  } catch (error) {
+    console.error("Adversarial review pass failed; using first-pass drafts.", error);
+  }
 
   const normalized = normalizeDrafts(result, request, verificationTier);
-  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: normalized.rejectedCount, warnings: normalized.warnings, suitability: result.suitability, message: result.message, provider: "openai", model: MODEL, verificationTier });
+  return json({
+    ok: normalized.accepted.length > 0,
+    drafts: normalized.accepted,
+    rejectedCount: normalized.rejectedCount,
+    warnings: normalized.warnings,
+    suitability: result.suitability,
+    message: result.message,
+    provider: "openai",
+    model: MODEL,
+    verificationTier,
+  });
 });
