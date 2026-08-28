@@ -1,8 +1,8 @@
 import type { CurriculumPackage, CurriculumQuestionDraft, QuestionQualityWarning } from "./types";
 import { validateCurriculumPackage } from "./validate";
 
-export const GENERATION_HARNESS_VERSION = "1.6.0";
-export const GENERATION_PROMPT_VERSION = "2026-08-27.4";
+export const GENERATION_HARNESS_VERSION = "1.7.0";
+export const GENERATION_PROMPT_VERSION = "2026-08-28.1";
 
 export interface HarnessIssue {
     questionId?: string;
@@ -55,12 +55,12 @@ export function validateGeneratedDrafts(
             });
         }
 
-        if (draft.answers.length < 3) {
+        if (draft.answers.length !== 4) {
             draftIssues.push({
                 questionId: draft.id,
                 severity: "error",
-                code: "too-few-answers",
-                message: "Generated multiple-choice questions need at least three answer choices.",
+                code: "invalid-answer-count",
+                message: "Generated questions must have exactly four answer choices in Harness 1.7.",
             });
         }
 
@@ -74,17 +74,22 @@ export function validateGeneratedDrafts(
         }
 
         const correctLength = correctAnswers[0]?.text.trim().length ?? 0;
-        const averageWrongLength = wrongAnswers.length
-            ? wrongAnswers.reduce((sum, answer) => sum + answer.text.trim().length, 0) / wrongAnswers.length
+        const wrongLengths = wrongAnswers.map((answer) => answer.text.trim().length);
+        const averageWrongLength = wrongLengths.length
+            ? wrongLengths.reduce((sum, length) => sum + length, 0) / wrongLengths.length
             : 0;
 
-        if (averageWrongLength > 0 && correctLength > averageWrongLength * 1.65 && correctLength - averageWrongLength > 22) {
+        if (
+            averageWrongLength > 0 &&
+            correctLength > averageWrongLength * 1.55 &&
+            correctLength - averageWrongLength > 18
+        ) {
             const item = warning(
                 "correct-answer-length-cue",
                 "The correct answer is substantially more detailed than the distractors and may be guessable by answer length.",
             );
             qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
 
         const qualifierWrongAnswers = wrongAnswers.filter((answer) => giveawayQualifier.test(answer.text)).length;
@@ -95,26 +100,22 @@ export function validateGeneratedDrafts(
                 "Multiple distractors use absolute or categorical qualifiers while the correct answer is more nuanced; a test-wise learner may infer the answer without knowing the material.",
             );
             qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
-        } else if (qualifierWrongAnswers === wrongAnswers.length && wrongAnswers.length >= 3 && qualifierCorrectAnswers === 0) {
-            const item = warning(
-                "all-distractors-categorical",
-                "Every distractor is categorically worded while the correct answer is qualified, creating a strong test-taking cue.",
-            );
-            qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
 
-        const answerWordCounts = draft.answers.map((answer) => answer.text.trim().split(/\s+/).filter(Boolean).length);
+        const answerWordCounts = draft.answers.map((answer) =>
+            answer.text.trim().split(/\s+/).filter(Boolean).length,
+        );
         const minWords = Math.min(...answerWordCounts);
         const maxWords = Math.max(...answerWordCounts);
-        if (maxWords >= Math.max(8, minWords * 3) && correctLength === Math.max(...draft.answers.map((answer) => answer.text.trim().length))) {
+        const correctWordCount = correctAnswers[0]?.text.trim().split(/\s+/).filter(Boolean).length ?? 0;
+        if (maxWords >= Math.max(8, minWords * 2.6) && correctWordCount === maxWords) {
             const item = warning(
                 "answer-shape-asymmetry",
                 "The correct option has a noticeably different shape or level of detail from the alternatives.",
             );
             qualityWarnings.push(item);
-            draftIssues.push({ questionId: draft.id, severity: "warning", ...item });
+            draftIssues.push({ questionId: draft.id, severity: "error", ...item });
         }
 
         if (draft.learningStage === "recognition" && draft.difficulty !== "beginner") {
