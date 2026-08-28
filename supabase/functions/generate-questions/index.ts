@@ -4,8 +4,8 @@ const corsHeaders = {
 };
 
 const MODEL = "gpt-5.4-mini";
-const HARNESS_VERSION = "1.7.0";
-const PROMPT_VERSION = "2026-08-28.1";
+const HARNESS_VERSION = "1.8.0";
+const PROMPT_VERSION = "2026-08-28.2";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 
@@ -27,369 +27,119 @@ function extractOutputText(response: any): string {
   return pieces.join("");
 }
 
-async function callStructuredModel(
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  schema: any,
-  schemaName: string,
-) {
+async function callStructuredModel(apiKey: string, systemPrompt: string, userPrompt: string, schema: any, schemaName: string) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
-      input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: schemaName,
-          strict: true,
-          schema,
-        },
-      },
+      input: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+      text: { format: { type: "json_schema", name: schemaName, strict: true, schema } },
     }),
   });
-
   if (!response.ok) {
     const detail = await response.text();
     console.error("OpenAI generation failed", response.status, detail);
     throw new Error(`Model generation failed (${response.status}).`);
   }
-
   const payload = await response.json();
   const outputText = extractOutputText(payload);
   if (!outputText) throw new Error("The model returned no structured output.");
-
-  try {
-    return JSON.parse(outputText);
-  } catch {
-    throw new Error("The model returned invalid structured output.");
-  }
+  try { return JSON.parse(outputText); } catch { throw new Error("The model returned invalid structured output."); }
 }
 
 function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], conceptIds: string[]) {
   return {
-    type: "object",
-    additionalProperties: false,
-    required: [
-      "id",
-      "semanticKey",
-      "prompt",
-      "answers",
-      "topic",
-      "conceptIds",
-      "masteryConcept",
-      "learningObjectiveId",
-      "difficulty",
-      "learningStage",
-      "explanation",
-      "sourceId",
-      "sourceReference",
-      "sourceEvidence",
-    ],
+    type: "object", additionalProperties: false,
+    required: ["id", "semanticKey", "prompt", "answers", "topic", "conceptIds", "masteryConcept", "learningObjectiveId", "difficulty", "learningStage", "explanation", "sourceId", "sourceReference", "sourceEvidence"],
     properties: {
-      id: { type: "string" },
-      semanticKey: { type: "string" },
-      prompt: { type: "string" },
-      answers: {
-        type: "array",
-        minItems: 4,
-        maxItems: 4,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["id", "text", "correct", "feedback"],
-          properties: {
-            id: { type: "string" },
-            text: { type: "string" },
-            correct: { type: "boolean" },
-            feedback: { type: "string" },
-          },
-        },
-      },
-      topic: { type: "string" },
-      conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } },
-      masteryConcept: { type: "string", enum: conceptIds },
-      learningObjectiveId: { type: "string", enum: objectiveIds },
-      difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
-      learningStage: { type: "string", enum: ["recognition", "understanding", "application"] },
-      explanation: { type: "string" },
-      sourceId: { type: "string", enum: sourceIds },
-      sourceReference: { type: "string" },
-      sourceEvidence: {
-        type: "object",
-        additionalProperties: false,
-        required: ["sourceId", "reference", "excerpt", "locator"],
-        properties: {
-          sourceId: { type: "string", enum: sourceIds },
-          reference: { type: "string" },
-          excerpt: { type: "string" },
-          locator: { type: "string" },
-        },
-      },
+      id: { type: "string" }, semanticKey: { type: "string" }, prompt: { type: "string" },
+      answers: { type: "array", minItems: 4, maxItems: 4, items: { type: "object", additionalProperties: false, required: ["id", "text", "correct", "feedback"], properties: { id: { type: "string" }, text: { type: "string" }, correct: { type: "boolean" }, feedback: { type: "string" } } } },
+      topic: { type: "string" }, conceptIds: { type: "array", minItems: 1, items: { type: "string", enum: conceptIds } }, masteryConcept: { type: "string", enum: conceptIds }, learningObjectiveId: { type: "string", enum: objectiveIds },
+      difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] }, learningStage: { type: "string", enum: ["recognition", "understanding", "application"] }, explanation: { type: "string" },
+      sourceId: { type: "string", enum: sourceIds }, sourceReference: { type: "string" },
+      sourceEvidence: { type: "object", additionalProperties: false, required: ["sourceId", "reference", "excerpt", "locator"], properties: { sourceId: { type: "string", enum: sourceIds }, reference: { type: "string" }, excerpt: { type: "string" }, locator: { type: "string" } } },
     },
   };
 }
 
 function normalizeDrafts(result: any, request: any, verificationTier: "classroom" | "high-assurance") {
-  const sourceIds = new Set((request.curriculum?.sources ?? []).map((source: any) => source.id));
-  const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((objective: any) => objective.id));
-  const conceptIds = new Set((request.curriculum?.concepts ?? []).map((concept: any) => concept.id));
-  const accepted: any[] = [];
-  let rejectedCount = 0;
-  const warnings: string[] = [];
-
+  const sourceIds = new Set((request.curriculum?.sources ?? []).map((s: any) => s.id));
+  const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((o: any) => o.id));
+  const conceptIds = new Set((request.curriculum?.concepts ?? []).map((c: any) => c.id));
+  const accepted: any[] = []; let rejectedCount = 0; const warnings: string[] = [];
   for (const [index, raw] of (result?.drafts ?? []).entries()) {
     const answers = Array.isArray(raw.answers) ? raw.answers : [];
-    const correctCount = answers.filter((answer: any) => answer?.correct === true).length;
+    const correctCount = answers.filter((a: any) => a?.correct === true).length;
     const evidence = raw.sourceEvidence;
-    const audit = Array.isArray(raw.distractorAudit) ? raw.distractorAudit : [];
-    const wrongAnswerIds = new Set(
-      answers.filter((answer: any) => answer?.correct !== true).map((answer: any) => answer?.id),
-    );
-    const auditedWrongAnswers = new Set(
-      audit
-        .filter(
-          (entry: any) =>
-            wrongAnswerIds.has(entry?.answerId) &&
-            typeof entry?.misconception === "string" &&
-            entry.misconception.trim().length >= 12 &&
-            typeof entry?.whyTempting === "string" &&
-            entry.whyTempting.trim().length >= 12,
-        )
-        .map((entry: any) => entry.answerId),
-    );
-
-    const valid =
-      typeof raw.prompt === "string" && raw.prompt.trim().length >= 12 &&
-      answers.length === 4 &&
-      correctCount === 1 &&
-      auditedWrongAnswers.size >= 2 &&
-      sourceIds.has(raw.sourceId) &&
-      objectiveIds.has(raw.learningObjectiveId) &&
-      conceptIds.has(raw.masteryConcept) &&
-      Array.isArray(raw.conceptIds) && raw.conceptIds.length > 0 && raw.conceptIds.every((id: string) => conceptIds.has(id)) &&
-      evidence && evidence.sourceId === raw.sourceId && typeof evidence.excerpt === "string" && evidence.excerpt.trim().length >= 12 &&
-      typeof raw.explanation === "string" && raw.explanation.trim().length >= 30;
-
-    if (!valid) {
-      rejectedCount += 1;
-      warnings.push(`Draft ${index + 1} failed grounding, shape, or distractor-plausibility checks and was rejected.`);
-      continue;
-    }
-
-    const { distractorAudit: _distractorAudit, ...cleanRaw } = raw;
-    accepted.push({
-      ...cleanRaw,
-      version: 1,
-      type: "single-select",
-      validationStatus: "ai-validated",
-      authorship: "ai-generated",
-      shuffleAnswers: true,
-      generation: {
-        provider: "openai",
-        model: MODEL,
-        harnessVersion: HARNESS_VERSION,
-        promptVersion: PROMPT_VERSION,
-        verificationTier,
-      },
-    });
+    const valid = typeof raw.prompt === "string" && raw.prompt.trim().length >= 12 && answers.length === 4 && correctCount === 1 && sourceIds.has(raw.sourceId) && objectiveIds.has(raw.learningObjectiveId) && conceptIds.has(raw.masteryConcept) && Array.isArray(raw.conceptIds) && raw.conceptIds.length > 0 && raw.conceptIds.every((id: string) => conceptIds.has(id)) && evidence && evidence.sourceId === raw.sourceId && typeof evidence.excerpt === "string" && evidence.excerpt.trim().length >= 12 && typeof raw.explanation === "string" && raw.explanation.trim().length >= 30;
+    if (!valid) { rejectedCount++; warnings.push(`Draft ${index + 1} failed grounding or shape checks and was rejected.`); continue; }
+    accepted.push({ ...raw, version: 1, type: "single-select", validationStatus: "ai-validated", authorship: "ai-generated", shuffleAnswers: true, generation: { provider: "openai", model: MODEL, harnessVersion: HARNESS_VERSION, promptVersion: PROMPT_VERSION, verificationTier } });
   }
-
   return { accepted, rejectedCount, warnings };
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ message: "Method not allowed." }, 405);
-
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) return json({ message: "OPENAI_API_KEY is not configured on the server." }, 500);
-
-  let request: any;
-  try {
-    request = await req.json();
-  } catch {
-    return json({ message: "Invalid JSON request." }, 400);
-  }
-
+  let request: any; try { request = await req.json(); } catch { return json({ message: "Invalid JSON request." }, 400); }
   const sourceText = typeof request?.sourceText === "string" ? request.sourceText.trim() : "";
   const curriculum = request?.curriculum;
   const targetQuestionCount = Math.min(Math.max(Number(request?.targetQuestionCount) || 8, 3), MAX_QUESTIONS);
   const verificationTier = request?.verificationTier === "high-assurance" ? "high-assurance" : "classroom";
-
   if (!curriculum || !sourceText) return json({ message: "Curriculum and source text are required." }, 400);
-  if (sourceText.length > MAX_SOURCE_CHARS) {
-    return json({ message: `Source is too large for this beta (${MAX_SOURCE_CHARS} character limit).` }, 413);
-  }
-  if (!Array.isArray(curriculum.sources) || !Array.isArray(curriculum.concepts) || !Array.isArray(curriculum.learningObjectives)) {
-    return json({ message: "Curriculum structure is invalid." }, 400);
-  }
+  if (sourceText.length > MAX_SOURCE_CHARS) return json({ message: `Source is too large for this beta (${MAX_SOURCE_CHARS} character limit).` }, 413);
+  if (!Array.isArray(curriculum.sources) || !Array.isArray(curriculum.concepts) || !Array.isArray(curriculum.learningObjectives)) return json({ message: "Curriculum structure is invalid." }, 400);
 
-  const sourceIds = curriculum.sources.map((source: any) => source.id);
-  const objectiveIds = curriculum.learningObjectives.map((objective: any) => objective.id);
-  const conceptIds = curriculum.concepts.map((concept: any) => concept.id);
+  const sourceIds = curriculum.sources.map((s: any) => s.id), objectiveIds = curriculum.learningObjectives.map((o: any) => o.id), conceptIds = curriculum.concepts.map((c: any) => c.id);
   const questionSchema = baseQuestionSchema(sourceIds, objectiveIds, conceptIds);
+  const generationSchema = { type: "object", additionalProperties: false, required: ["suitability", "message", "drafts"], properties: { suitability: { type: "string", enum: ["allowed", "limited", "blocked"] }, message: { type: "string" }, drafts: { type: "array", maxItems: targetQuestionCount, items: questionSchema } } };
 
-  const generationSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["suitability", "message", "drafts"],
-    properties: {
-      suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
-      message: { type: "string" },
-      drafts: {
-        type: "array",
-        maxItems: targetQuestionCount,
-        items: questionSchema,
-      },
-    },
-  };
+  const candidateSchema = { type: "object", additionalProperties: false, required: ["questionId", "candidates"], properties: { questionId: { type: "string" }, candidates: { type: "array", minItems: 6, maxItems: 8, items: { type: "object", additionalProperties: false, required: ["text", "misconception", "whyTempting"], properties: { text: { type: "string" }, misconception: { type: "string" }, whyTempting: { type: "string" } } } } };
+  const poolSchema = { type: "object", additionalProperties: false, required: ["pools"], properties: { pools: { type: "array", maxItems: targetQuestionCount, items: candidateSchema } } };
+  const scoredCandidateSchema = { type: "object", additionalProperties: false, required: ["text", "plausibility", "parallelism", "testWiseResistance", "reason"], properties: { text: { type: "string" }, plausibility: { type: "integer", minimum: 1, maximum: 5 }, parallelism: { type: "integer", minimum: 1, maximum: 5 }, testWiseResistance: { type: "integer", minimum: 1, maximum: 5 }, reason: { type: "string" } } };
+  const scoreSchema = { type: "object", additionalProperties: false, required: ["questions"], properties: { questions: { type: "array", maxItems: targetQuestionCount, items: { type: "object", additionalProperties: false, required: ["questionId", "candidates"], properties: { questionId: { type: "string" }, candidates: { type: "array", minItems: 6, maxItems: 8, items: scoredCandidateSchema } } } } } };
+  const assemblySchema = { type: "object", additionalProperties: false, required: ["suitability", "message", "drafts"], properties: { suitability: { type: "string", enum: ["allowed", "limited", "blocked"] }, message: { type: "string" }, drafts: { type: "array", maxItems: targetQuestionCount, items: questionSchema } } };
 
-  const auditedQuestionSchema = {
-    ...questionSchema,
-    required: [...questionSchema.required, "distractorAudit"],
-    properties: {
-      ...questionSchema.properties,
-      distractorAudit: {
-        type: "array",
-        minItems: 3,
-        maxItems: 3,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["answerId", "misconception", "whyTempting"],
-          properties: {
-            answerId: { type: "string" },
-            misconception: { type: "string" },
-            whyTempting: { type: "string" },
-          },
-        },
-      },
-    },
-  };
-
-  const reviewSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["suitability", "message", "drafts"],
-    properties: {
-      suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
-      message: { type: "string" },
-      drafts: {
-        type: "array",
-        maxItems: targetQuestionCount,
-        items: auditedQuestionSchema,
-      },
-    },
-  };
-
-  const tierRules = verificationTier === "high-assurance"
-    ? `High-assurance verification mode:\n- Be more conservative than normal classroom generation.\n- Generate a question only when the supplied source states or strongly entails the correct answer without relying on outside knowledge.\n- Prefer narrowly supported claims over broad generalizations.\n- Source evidence must directly support the precise distinction tested.\n- If wording in the source is ambiguous, incomplete, outdated, or insufficient, omit that question rather than resolve it yourself.\n- This is stricter source-grounding, not independent external corroboration.`
-    : `Classroom verification mode:\n- Treat the supplied curriculum as the instructional authority.\n- Ground each answer and explanation directly in that curriculum.\n- This tier is appropriate for normal educational use and optional educator review.`;
-
-  const systemPrompt = `You generate grounded multiple-choice questions for a learning app.\n\nPrimary goal: produce questions that measure genuine understanding rather than elimination skill. Assume a bright, test-wise learner.\n\n${tierRules}\n\nGrounding:\n- Use only the supplied curriculum source for factual claims.\n- Every correct answer and explanation must be directly supported by sourceEvidence.\n- If the source does not support a defensible question, omit it.\n- Use exact supplied source, concept, and objective IDs.\n\nLearner-facing language:\n- Questions must stand alone as subject-matter questions.\n- Never ask what the curriculum, lesson, source, module, heading, author, or learning objective says unless that structure is itself the subject.\n- Keep provenance in metadata, not in the prompt.\n\nQuestion design:\n- Prefer application, diagnosis, comparison, transfer, and tradeoff questions over pure recall.\n- Across sets of 8 or more, aim roughly for 10-20% recognition, 30-40% understanding, and 45-60% application when supported by the source.\n- A few straightforward recall questions are fine.\n- For scenarios, make constraints matter.\n- Prefer nearby concepts and realistic alternatives over unrelated vocabulary.\n- Keep answer choices parallel in grammar, specificity, and length.\n- Do not make one answer uniquely nuanced, professional, safe, or detailed.\n- Avoid obvious qualifier cues such as always, never, only, every, guaranteed, must, cannot, obviously, or clearly unless technically necessary.\n- Quality is more important than count; return fewer questions rather than pad.\n\nExplanations:\n- Explain why the correct answer works and, when useful, the key distinction from a tempting near miss.\n- Do not merely restate the answer.\n\nSafety:\n- Do not convert source material into procedural training that meaningfully facilitates serious wrongdoing or harm.\n- If the source is primarily unsuitable, return suitability=blocked and no drafts.`;
-
-  const userPrompt = JSON.stringify({
-    curriculum: {
-      id: curriculum.id,
-      title: curriculum.title,
-      sources: curriculum.sources,
-      concepts: curriculum.concepts,
-      learningObjectives: curriculum.learningObjectives,
-    },
-    targetQuestionCount,
-    verificationTier,
-    qualityGuidance: request.qualityGuidance ?? [],
-    sourceText,
-  });
+  const tierRules = verificationTier === "high-assurance" ? "High-assurance: omit any item whose correct answer is not strongly entailed by the supplied source. This is strict grounding, not external fact-checking." : "Classroom: treat the supplied curriculum as the instructional authority and ground every answer directly in it.";
+  const systemPrompt = `Generate grounded multiple-choice question STEMS and correct answers for a learning app. ${tierRules}\nAssume a bright, test-wise learner. Prefer application, diagnosis, comparison, transfer, and tradeoffs. A few recall items are fine. Keep learner-facing wording independent of curriculum structure. Use only the supplied source for factual claims. Provide four answers for schema compatibility, but this is a provisional first pass: focus on a strong prompt, one defensible correct answer, grounding, and explanation. Do not spend effort polishing distractors; later stages will replace them. Quality beats count.`;
+  const userPrompt = JSON.stringify({ curriculum: { id: curriculum.id, title: curriculum.title, sources: curriculum.sources, concepts: curriculum.concepts, learningObjectives: curriculum.learningObjectives }, targetQuestionCount, verificationTier, sourceText });
 
   let result: any;
-  try {
-    result = await callStructuredModel(
-      apiKey,
-      systemPrompt,
-      userPrompt,
-      generationSchema,
-      "grounded_question_generation",
-    );
-  } catch (error) {
-    return json({ message: error instanceof Error ? error.message : "Question generation failed." }, 502);
+  try { result = await callStructuredModel(apiKey, systemPrompt, userPrompt, generationSchema, "grounded_question_stems"); }
+  catch (error) { return json({ message: error instanceof Error ? error.message : "Question generation failed." }, 502); }
+  if (result.suitability === "blocked") return json({ ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked", message: result.message, provider: "openai", model: MODEL });
+
+  const poolPrompt = `You are a specialist assessment-item distractor writer. For each supplied question, IGNORE its provisional wrong answers. Keep the prompt and correct answer fixed. Generate 6-8 candidate WRONG answers from realistic partial knowledge.\nEach candidate must correspond to a specific misconception: a nearby-concept confusion, correct principle applied at the wrong scope, valid approach optimizing the wrong constraint, partially correct action missing one requirement, reasonable default defeated by an exception, or realistic operational shortcut.\nDo not use jokes, nonsense, reckless behavior, category mismatches, or wording whose wrongness is obvious from common sense. Avoid always/never/only/every/guaranteed/must/cannot as giveaway language. Match the correct answer's grammar, specificity, professionalism, and approximate length. A learner who knows half the material should find several candidates tempting. Stay within concepts supported by the supplied source.`;
+  let pools: any;
+  try { pools = await callStructuredModel(apiKey, poolPrompt, JSON.stringify({ sourceText, questions: result.drafts }), poolSchema, "distractor_candidate_pools"); }
+  catch (error) { return json({ message: "Distractor candidate generation failed; no first-pass questions were accepted." }, 502); }
+
+  const scorePrompt = `You are a skeptical assessment psychometrics reviewer. Score each candidate wrong answer WITHOUT rewriting it. Compare it with the question and correct answer.\nPlausibility 5 means a learner with substantial but incomplete subject knowledge could sincerely choose it; 1 means absurd/irrelevant/common-sense wrong. Parallelism 5 means it competes at the same conceptual level, grammar, specificity, and length as the correct answer. Test-wise resistance 5 means wording gives no easy elimination cue; 1 means a savvy test-taker can discard it without subject knowledge. Be harsh. Do not reward a candidate merely because its accompanying rationale claims a misconception. Scores should reflect the actual answer text.`;
+  let scores: any;
+  try { scores = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: result.drafts, pools: pools.pools }), scoreSchema, "distractor_candidate_scores"); }
+  catch (error) { return json({ message: "Distractor scoring failed; no questions were accepted." }, 502); }
+
+  const scoreMap = new Map((scores.questions ?? []).map((q: any) => [q.questionId, q.candidates]));
+  const poolMap = new Map((pools.pools ?? []).map((p: any) => [p.questionId, p.candidates]));
+  const qualified: any[] = [];
+  for (const draft of result.drafts ?? []) {
+    const scored = (scoreMap.get(draft.id) ?? []).filter((c: any) => c.plausibility >= 4 && c.parallelism >= 4 && c.testWiseResistance >= 4);
+    const originals = poolMap.get(draft.id) ?? [];
+    const selected = scored.slice(0, 5).map((s: any) => ({ ...s, misconception: originals.find((o: any) => o.text === s.text)?.misconception ?? "", whyTempting: originals.find((o: any) => o.text === s.text)?.whyTempting ?? "" }));
+    if (selected.length >= 3) qualified.push({ draft, qualifiedDistractors: selected });
   }
 
-  if (result.suitability === "blocked") {
-    return json({
-      ok: false,
-      drafts: [],
-      rejectedCount: 0,
-      warnings: [],
-      suitability: "blocked",
-      message: result.message || "This material is not suitable for generated practice.",
-      provider: "openai",
-      model: MODEL,
-    });
-  }
+  if (!qualified.length) return json({ ok: false, drafts: [], rejectedCount: (result.drafts ?? []).length, warnings: ["No question had three distractors that passed the independent plausibility threshold."], suitability: result.suitability, message: "Generation completed, but distractor quality was below threshold. Try again or use a richer source.", provider: "openai", model: MODEL, verificationTier });
 
-  const reviewerPrompt = `You are the adversarial distractor designer and assessment editor for a learning app.\n\nThe first pass has already created candidate questions. Your task is to rebuild weak answer sets from explicit misconception models. You are not required to preserve question count.\n\nFor EACH retained question, follow this process internally before writing the final choices:\n1. Identify the exact knowledge or reasoning step required for the correct answer.\n2. Invent at least three distinct partial-knowledge models a learner could hold. Each model must be a concrete mistaken rule, omitted constraint, overgeneralization, nearby-concept confusion, or inferior-but-plausible decision.\n3. Turn those models into three distractors.\n4. For each distractor, return a distractorAudit entry that states the misconception and why a partially informed learner might choose it.\n5. If you cannot produce at least TWO genuinely plausible misconceptions without leaving the supplied source's conceptual scope, DELETE THE QUESTION.\n\nHard rejection rules:\n- Reject distractors that are jokes, absurd, reckless, obviously irrelevant, category-mismatched, or wrong by ordinary common sense.\n- Reject distractors whose only rationale is that the learner 'does not know the definition,' 'might guess it,' or that the option merely 'sounds plausible.' The misconception must be specific.\n- Reject answer sets where the correct option is uniquely longer, more nuanced, safer, more professional, or more carefully qualified.\n- Reject qualifier asymmetry where several wrong answers contain words like always, never, only, every, guaranteed, must, cannot, obviously, or clearly while the correct answer does not.\n- Reject scenarios where one option obviously follows the stated requirement and the others ignore the scenario entirely. Competing options should each honor most of the scenario while failing on a subtle but meaningful dimension.\n\nPreferred distractor patterns:\n- correct principle applied to the wrong constraint;\n- correct concept confused with a nearby concept;\n- partially correct action that omits one necessary requirement;\n- valid approach that optimizes the wrong tradeoff;\n- reasonable default applied where an exception changes the answer;\n- right service or design pattern used at the wrong scope.\n\nBenchmark:\nA learner with partial knowledge should have to compare at least two plausible wrong choices with the correct answer. If ordinary test-taking technique can remove most of the options, rewrite or delete the item.\n\nPreserve grounding and exact IDs. You may rewrite prompts, answer text, feedback, explanations, difficulty, and learningStage. Preserve id and semanticKey for retained questions. Return fewer questions if needed.`;
+  const assemblyPrompt = `You are the final assessment editor. Assemble only the supplied qualified questions. For each, preserve id, semanticKey, grounding IDs, source evidence, and correct answer meaning. Choose exactly THREE supplied qualified distractors; do not invent replacements. Keep four total choices with exactly one correct. You may lightly edit the prompt and all four answer choices only to improve grammatical/length parallelism without changing their meaning. If a question still feels easy to solve by test-taking cues, OMIT it. Return fewer questions rather than weakening standards.`;
+  let assembled: any;
+  try { assembled = await callStructuredModel(apiKey, assemblyPrompt, JSON.stringify({ sourceText, qualified }), assemblySchema, "assembled_quality_questions"); }
+  catch (error) { return json({ message: "Final question assembly failed." }, 502); }
 
-  const reviewerUserPrompt = JSON.stringify({
-    curriculum: {
-      id: curriculum.id,
-      title: curriculum.title,
-      sources: curriculum.sources,
-      concepts: curriculum.concepts,
-      learningObjectives: curriculum.learningObjectives,
-    },
-    verificationTier,
-    sourceText,
-    draftsToAudit: result.drafts ?? [],
-  });
-
-  try {
-    const reviewed = await callStructuredModel(
-      apiKey,
-      reviewerPrompt,
-      reviewerUserPrompt,
-      reviewSchema,
-      "misconception_audited_questions",
-    );
-    result = {
-      ...reviewed,
-      suitability: reviewed.suitability || result.suitability,
-      message: reviewed.message || result.message,
-    };
-  } catch (error) {
-    console.error("Misconception audit failed; rejecting first-pass drafts instead of silently falling back.", error);
-    return json({
-      ok: false,
-      drafts: [],
-      rejectedCount: Array.isArray(result?.drafts) ? result.drafts.length : 0,
-      warnings: ["The distractor-quality audit failed, so first-pass questions were not accepted."],
-      suitability: result.suitability,
-      message: "Question generation completed, but the distractor-quality audit failed. Please try again.",
-      provider: "openai",
-      model: MODEL,
-      verificationTier,
-    }, 502);
-  }
-
-  const normalized = normalizeDrafts(result, request, verificationTier);
-  return json({
-    ok: normalized.accepted.length > 0,
-    drafts: normalized.accepted,
-    rejectedCount: normalized.rejectedCount,
-    warnings: normalized.warnings,
-    suitability: result.suitability,
-    message: result.message,
-    provider: "openai",
-    model: MODEL,
-    verificationTier,
-  });
+  const normalized = normalizeDrafts(assembled, request, verificationTier);
+  normalized.rejectedCount += Math.max(0, (result.drafts ?? []).length - qualified.length);
+  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: normalized.rejectedCount, warnings: normalized.warnings, suitability: assembled.suitability || result.suitability, message: assembled.message || result.message, provider: "openai", model: MODEL, verificationTier });
 });
