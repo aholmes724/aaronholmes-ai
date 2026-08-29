@@ -1,8 +1,8 @@
 import type { CurriculumPackage, CurriculumQuestionDraft, QuestionQualityWarning } from "./types";
 import { validateCurriculumPackage } from "./validate";
 
-export const GENERATION_HARNESS_VERSION = "1.8.2";
-export const GENERATION_PROMPT_VERSION = "2026-08-28.3";
+export const GENERATION_HARNESS_VERSION = "1.8.3";
+export const GENERATION_PROMPT_VERSION = "2026-08-28.4";
 
 export interface HarnessIssue {
     questionId?: string;
