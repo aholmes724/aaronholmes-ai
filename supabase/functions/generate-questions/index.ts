@@ -5,8 +5,8 @@ const corsHeaders = {
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const DISTRACTOR_MODEL = "gpt-5.4";
-const HARNESS_VERSION = "1.8.7";
-const PROMPT_VERSION = "2026-08-28.7";
+const HARNESS_VERSION = "1.8.8";
+const PROMPT_VERSION = "2026-08-28.8";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 const BATCH_SIZE = 3;
@@ -202,7 +202,7 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
   });
   return {
     harnessVersion: HARNESS_VERSION, promptVersion: PROMPT_VERSION, generatedAt: new Date().toISOString(), targetQuestionCount,
-    batching: { batchSize: BATCH_SIZE, poolBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE), judgeBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE) },
+    batching: { batchSize: BATCH_SIZE, poolBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE), judgeBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE), judgeMode: "concurrent" },
     stageTrace,
     threshold: { plausibility: PLAUSIBILITY_THRESHOLD, parallelism: PARALLELISM_THRESHOLD, testWiseResistance: TEST_WISE_RESISTANCE_THRESHOLD, alternativeCorrectness: "clearly-wrong", minimumPassingDistractors: 3 },
     models: { stemAndCorrectAnswer: DEFAULT_MODEL, distractorCandidates: DISTRACTOR_MODEL, distractorJudge: `${DEFAULT_MODEL} (high reasoning)`, finalAssembly: "deterministic code" },
@@ -305,18 +305,27 @@ Deno.serve(async (req) => {
 
   const poolMap = new Map((pools.pools ?? []).map((p: any) => [p.questionId, p]));
   const scores: any = { questions: [] };
-  for (let i = 0; i < questionBatches.length; i++) {
-    const batch = questionBatches[i];
-    const batchPools = batch.map((q: any) => poolMap.get(q.id)).filter(Boolean);
-    mark(`judge:${i + 1}/${questionBatches.length}:start`);
-    try {
-      const batchResult = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: batch, pools: batchPools }), scoreSchema(batch.length), `distractor_candidate_scores_${i + 1}`, { reasoningEffort: "high" });
-      scores.questions.push(...(batchResult.questions ?? []));
+  mark(`judge:concurrent:start:${questionBatches.length}`);
+  try {
+    const batchResults = await Promise.all(questionBatches.map(async (batch, i) => {
+      const batchPools = batch.map((q: any) => poolMap.get(q.id)).filter(Boolean);
+      mark(`judge:${i + 1}/${questionBatches.length}:start`);
+      const batchResult = await callStructuredModel(
+        apiKey,
+        scorePrompt,
+        JSON.stringify({ sourceText, questions: batch, pools: batchPools }),
+        scoreSchema(batch.length),
+        `distractor_candidate_scores_${i + 1}`,
+        { reasoningEffort: "high" },
+      );
       mark(`judge:${i + 1}/${questionBatches.length}:complete`);
-    } catch (error) {
-      const partialDiagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount, stageTrace);
-      return json({ message: `Distractor scoring failed in batch ${i + 1}.`, detail: error instanceof Error ? error.message : undefined, diagnostics: partialDiagnostics, stageTrace }, 502);
-    }
+      return batchResult;
+    }));
+    for (const batchResult of batchResults) scores.questions.push(...(batchResult.questions ?? []));
+    mark(`judge:concurrent:complete:${scores.questions.length}`);
+  } catch (error) {
+    const partialDiagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount, stageTrace);
+    return json({ message: "Concurrent distractor scoring failed.", detail: error instanceof Error ? error.message : undefined, diagnostics: partialDiagnostics, stageTrace }, 502);
   }
 
   mark("assembly:start");
@@ -334,5 +343,5 @@ Deno.serve(async (req) => {
   mark(`validation:complete:${normalized.accepted.length}`);
   const finalDiagnostics = { ...diagnostics, stageTrace, finalAssembly: { mode: "deterministic", qualifiedQuestionIds: assembled.qualifiedQuestionIds, acceptedQuestionIds: [...acceptedIds], selectedDistractors: assembled.selectedByQuestion, validationRejections: normalized.rejected } };
 
-  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: gateRejectedCount + finalRejectedIds.length, warnings: normalized.warnings, suitability: result.suitability, message: `${normalized.accepted.length} question${normalized.accepted.length === 1 ? "" : "s"} assembled deterministically after batched distractor qualification.`, provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: finalDiagnostics, stageTrace });
+  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: gateRejectedCount + finalRejectedIds.length, warnings: normalized.warnings, suitability: result.suitability, message: `${normalized.accepted.length} question${normalized.accepted.length === 1 ? "" : "s"} assembled deterministically after concurrent distractor qualification.`, provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: finalDiagnostics, stageTrace });
 });
