@@ -1,5 +1,6 @@
 import { readImportedCurriculum } from "../data/curriculum/storage";
 import { exportCurriculum } from "../data/curriculum/export";
+import { exportGenerationDiagnostics, readGenerationDiagnostics } from "../data/curriculum/generation-client";
 
 const SUPPORTED_PATHS = new Set(["/import", "/curriculum-review"]);
 
@@ -9,6 +10,29 @@ function hasExportableQuestions(): boolean {
     return drafts.some((draft) =>
         draft.validationStatus === "ai-validated" || draft.validationStatus === "approved",
     );
+}
+
+function hasDiagnostics(): boolean {
+    return Boolean(readGenerationDiagnostics());
+}
+
+function makeChoice(label: string, action: () => void, menu: HTMLElement, button: HTMLButtonElement): HTMLButtonElement {
+    const choice = document.createElement("button");
+    choice.type = "button";
+    choice.className = "secondary-button";
+    choice.textContent = label;
+    choice.setAttribute("role", "menuitem");
+    choice.style.display = "block";
+    choice.style.width = "100%";
+    choice.style.textAlign = "left";
+    choice.style.margin = "0";
+    choice.addEventListener("click", () => {
+        action();
+        menu.hidden = true;
+        menu.style.display = "none";
+        button.setAttribute("aria-expanded", "false");
+    });
+    return choice;
 }
 
 function makeFormatMenu(wrapper: HTMLElement, button: HTMLButtonElement): HTMLElement {
@@ -21,36 +45,30 @@ function makeFormatMenu(wrapper: HTMLElement, button: HTMLButtonElement): HTMLEl
     menu.style.zIndex = "20";
     menu.style.top = "calc(100% + 0.4rem)";
     menu.style.right = "0";
-    menu.style.minWidth = "12rem";
+    menu.style.minWidth = "14rem";
     menu.style.padding = "0.4rem";
     menu.style.border = "1px solid var(--border-color, #4a5157)";
     menu.style.borderRadius = "0.5rem";
     menu.style.background = "var(--surface-color, #22272a)";
     menu.style.boxShadow = "0 0.5rem 1.5rem rgba(0, 0, 0, 0.2)";
 
-    const addChoice = (label: string, format: "markdown" | "json") => {
-        const choice = document.createElement("button");
-        choice.type = "button";
-        choice.className = "secondary-button";
-        choice.textContent = label;
-        choice.setAttribute("role", "menuitem");
-        choice.style.display = "block";
-        choice.style.width = "100%";
-        choice.style.textAlign = "left";
-        choice.style.margin = "0";
-        choice.addEventListener("click", () => {
-            const latest = readImportedCurriculum();
-            if (!latest?.curriculum) return;
-            exportCurriculum(latest.curriculum, format);
-            menu.hidden = true;
-            menu.style.display = "none";
-            button.setAttribute("aria-expanded", "false");
-        });
-        menu.append(choice);
-    };
+    if (hasExportableQuestions()) {
+        menu.append(
+            makeChoice("Questions (Markdown .md)", () => {
+                const latest = readImportedCurriculum();
+                if (latest?.curriculum) exportCurriculum(latest.curriculum, "markdown");
+            }, menu, button),
+            makeChoice("Curriculum package (.json)", () => {
+                const latest = readImportedCurriculum();
+                if (latest?.curriculum) exportCurriculum(latest.curriculum, "json");
+            }, menu, button),
+        );
+    }
 
-    addChoice("Questions (Markdown .md)", "markdown");
-    addChoice("Curriculum package (.json)", "json");
+    if (hasDiagnostics()) {
+        menu.append(makeChoice("Generation diagnostics (.json)", exportGenerationDiagnostics, menu, button));
+    }
+
     wrapper.append(menu);
     return menu;
 }
@@ -69,8 +87,8 @@ function addExportControl(container: HTMLElement): void {
     button.textContent = "Export";
     button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
-    button.disabled = !hasExportableQuestions();
-    if (button.disabled) button.title = "Generate practice-ready questions before exporting.";
+    button.disabled = !hasExportableQuestions() && !hasDiagnostics();
+    if (button.disabled) button.title = "Generate questions before exporting.";
 
     wrapper.append(button);
     const menu = makeFormatMenu(wrapper, button);
