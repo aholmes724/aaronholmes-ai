@@ -5,10 +5,11 @@ const corsHeaders = {
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const DISTRACTOR_MODEL = "gpt-5.4";
-const HARNESS_VERSION = "1.8.6";
-const PROMPT_VERSION = "2026-08-28.6";
+const HARNESS_VERSION = "1.8.7";
+const PROMPT_VERSION = "2026-08-28.7";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
+const BATCH_SIZE = 3;
 const PLAUSIBILITY_THRESHOLD = 3;
 const PARALLELISM_THRESHOLD = 4;
 const TEST_WISE_RESISTANCE_THRESHOLD = 4;
@@ -67,6 +68,12 @@ async function callStructuredModel(
   catch { throw new Error("The model returned invalid structured output."); }
 }
 
+function chunks<T>(items: T[], size: number): T[][] {
+  const output: T[][] = [];
+  for (let i = 0; i < items.length; i += size) output.push(items.slice(i, i + size));
+  return output;
+}
+
 function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], conceptIds: string[]) {
   return {
     type: "object", additionalProperties: false,
@@ -92,6 +99,62 @@ function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], concept
         type: "object", additionalProperties: false,
         required: ["sourceId", "reference", "excerpt", "locator"],
         properties: { sourceId: { type: "string", enum: sourceIds }, reference: { type: "string" }, excerpt: { type: "string" }, locator: { type: "string" } },
+      },
+    },
+  };
+}
+
+function candidateSchema() {
+  return {
+    type: "object", additionalProperties: false,
+    required: ["questionId", "candidates"],
+    properties: {
+      questionId: { type: "string" },
+      candidates: {
+        type: "array", minItems: 6, maxItems: 8,
+        items: {
+          type: "object", additionalProperties: false,
+          required: ["text", "misconception", "whyTempting"],
+          properties: { text: { type: "string" }, misconception: { type: "string" }, whyTempting: { type: "string" } },
+        },
+      },
+    },
+  };
+}
+
+function poolSchema(maxItems: number) {
+  return {
+    type: "object", additionalProperties: false, required: ["pools"],
+    properties: { pools: { type: "array", maxItems, items: candidateSchema() } },
+  };
+}
+
+function scoredCandidateSchema() {
+  return {
+    type: "object", additionalProperties: false,
+    required: ["text", "plausibility", "parallelism", "testWiseResistance", "alternativeCorrectness", "correctnessReason", "reason"],
+    properties: {
+      text: { type: "string" },
+      plausibility: { type: "integer", minimum: 1, maximum: 5 },
+      parallelism: { type: "integer", minimum: 1, maximum: 5 },
+      testWiseResistance: { type: "integer", minimum: 1, maximum: 5 },
+      alternativeCorrectness: { type: "string", enum: ["clearly-wrong", "arguably-correct", "effectively-correct"] },
+      correctnessReason: { type: "string" },
+      reason: { type: "string" },
+    },
+  };
+}
+
+function scoreSchema(maxItems: number) {
+  return {
+    type: "object", additionalProperties: false, required: ["questions"],
+    properties: {
+      questions: {
+        type: "array", maxItems,
+        items: {
+          type: "object", additionalProperties: false, required: ["questionId", "candidates"],
+          properties: { questionId: { type: "string" }, candidates: { type: "array", minItems: 6, maxItems: 8, items: scoredCandidateSchema() } },
+        },
       },
     },
   };
@@ -123,7 +186,7 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
   return { accepted, rejected, warnings };
 }
 
-function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCount: number) {
+function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCount: number, stageTrace: string[]) {
   const poolMap = new Map((pools?.pools ?? []).map((p: any) => [p.questionId, p.candidates ?? []]));
   const scoreMap = new Map((scores?.questions ?? []).map((q: any) => [q.questionId, q.candidates ?? []]));
   const questions = (result?.drafts ?? []).map((draft: any) => {
@@ -139,6 +202,8 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
   });
   return {
     harnessVersion: HARNESS_VERSION, promptVersion: PROMPT_VERSION, generatedAt: new Date().toISOString(), targetQuestionCount,
+    batching: { batchSize: BATCH_SIZE, poolBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE), judgeBatches: Math.ceil((result?.drafts?.length ?? 0) / BATCH_SIZE) },
+    stageTrace,
     threshold: { plausibility: PLAUSIBILITY_THRESHOLD, parallelism: PARALLELISM_THRESHOLD, testWiseResistance: TEST_WISE_RESISTANCE_THRESHOLD, alternativeCorrectness: "clearly-wrong", minimumPassingDistractors: 3 },
     models: { stemAndCorrectAnswer: DEFAULT_MODEL, distractorCandidates: DISTRACTOR_MODEL, distractorJudge: `${DEFAULT_MODEL} (high reasoning)`, finalAssembly: "deterministic code" },
     questions,
@@ -184,6 +249,13 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ message: "Method not allowed." }, 405);
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) return json({ message: "OPENAI_API_KEY is not configured on the server." }, 500);
+
+  const stageTrace: string[] = [];
+  const mark = (stage: string) => {
+    stageTrace.push(stage);
+    console.log(`[${HARNESS_VERSION}] ${stage}`);
+  };
+
   let request: any;
   try { request = await req.json(); } catch { return json({ message: "Invalid JSON request." }, 400); }
   const sourceText = typeof request?.sourceText === "string" ? request.sourceText.trim() : "";
@@ -199,42 +271,68 @@ Deno.serve(async (req) => {
   const conceptIds = curriculum.concepts.map((c: any) => c.id);
   const questionSchema = baseQuestionSchema(sourceIds, objectiveIds, conceptIds);
   const generationSchema = { type: "object", additionalProperties: false, required: ["suitability", "message", "drafts"], properties: { suitability: { type: "string", enum: ["allowed", "limited", "blocked"] }, message: { type: "string" }, drafts: { type: "array", maxItems: targetQuestionCount, items: questionSchema } } };
-  const candidateSchema = { type: "object", additionalProperties: false, required: ["questionId", "candidates"], properties: { questionId: { type: "string" }, candidates: { type: "array", minItems: 6, maxItems: 8, items: { type: "object", additionalProperties: false, required: ["text", "misconception", "whyTempting"], properties: { text: { type: "string" }, misconception: { type: "string" }, whyTempting: { type: "string" } } } } } };
-  const poolSchema = { type: "object", additionalProperties: false, required: ["pools"], properties: { pools: { type: "array", maxItems: targetQuestionCount, items: candidateSchema } } };
-  const scoredCandidateSchema = { type: "object", additionalProperties: false, required: ["text", "plausibility", "parallelism", "testWiseResistance", "alternativeCorrectness", "correctnessReason", "reason"], properties: { text: { type: "string" }, plausibility: { type: "integer", minimum: 1, maximum: 5 }, parallelism: { type: "integer", minimum: 1, maximum: 5 }, testWiseResistance: { type: "integer", minimum: 1, maximum: 5 }, alternativeCorrectness: { type: "string", enum: ["clearly-wrong", "arguably-correct", "effectively-correct"] }, correctnessReason: { type: "string" }, reason: { type: "string" } } };
-  const scoredQuestionSchema = { type: "object", additionalProperties: false, required: ["questionId", "candidates"], properties: { questionId: { type: "string" }, candidates: { type: "array", minItems: 6, maxItems: 8, items: scoredCandidateSchema } } };
-  const scoreSchema = { type: "object", additionalProperties: false, required: ["questions"], properties: { questions: { type: "array", maxItems: targetQuestionCount, items: scoredQuestionSchema } } };
 
   const tierRules = verificationTier === "high-assurance" ? "High-assurance: omit any item whose correct answer is not strongly entailed by the supplied source. This is strict grounding, not external fact-checking." : "Classroom: treat the supplied curriculum as the instructional authority and ground every answer directly in it.";
   const systemPrompt = `Generate grounded multiple-choice question STEMS and correct answers for a learning app. ${tierRules}\nAssume a bright, test-wise learner. Prefer application, diagnosis, comparison, transfer, and tradeoffs. A few recall items are fine. Keep learner-facing wording independent of curriculum structure. Use only the supplied source for factual claims. Provide four answers for schema compatibility, but this is a provisional first pass: focus on a strong prompt, one defensible correct answer, grounding, and explanation. Do not spend effort polishing distractors; later stages will replace them. Quality beats count.`;
 
+  mark("stems:start");
   let result: any;
   try {
     result = await callStructuredModel(apiKey, systemPrompt, JSON.stringify({ curriculum: { id: curriculum.id, title: curriculum.title, sources: curriculum.sources, concepts: curriculum.concepts, learningObjectives: curriculum.learningObjectives }, targetQuestionCount, verificationTier, sourceText }), generationSchema, "grounded_question_stems");
-  } catch (error) { return json({ message: error instanceof Error ? error.message : "Question generation failed." }, 502); }
-  if (result.suitability === "blocked") return json({ ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked", message: result.message, provider: "openai", model: DEFAULT_MODEL });
+  } catch (error) {
+    return json({ message: error instanceof Error ? error.message : "Question generation failed.", stageTrace }, 502);
+  }
+  mark(`stems:complete:${result?.drafts?.length ?? 0}`);
+  if (result.suitability === "blocked") return json({ ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked", message: result.message, provider: "openai", model: DEFAULT_MODEL, stageTrace });
 
   const poolPrompt = `You are a specialist assessment-item distractor writer. For each supplied question, IGNORE its provisional wrong answers. Keep the prompt and correct answer fixed. Generate 6-8 candidate WRONG answers from realistic partial knowledge. Each candidate must represent a specific misconception: nearby-concept confusion, right principle at wrong scope, wrong constraint optimization, partially correct action missing one requirement, default defeated by an exception, or realistic operational shortcut. No jokes, nonsense, reckless behavior, category mismatches, or common-sense wrong answers. Avoid giveaway absolutes. Match the correct answer's grammar, specificity, professionalism, and approximate length. Stay within the supplied source. Prefer distractors that would tempt a learner who understands much of the material but confuses two nearby concepts or applies the correct principle in the wrong context. Do not intentionally generate a paraphrase or alternate formulation that could also correctly answer the question.`;
-  let pools: any;
-  try { pools = await callStructuredModel(apiKey, poolPrompt, JSON.stringify({ sourceText, questions: result.drafts }), poolSchema, "distractor_candidate_pools", { model: DISTRACTOR_MODEL }); }
-  catch { return json({ message: "Distractor candidate generation failed; no first-pass questions were accepted." }, 502); }
+
+  const questionBatches = chunks<any>(result.drafts ?? [], BATCH_SIZE);
+  const pools: any = { pools: [] };
+  for (let i = 0; i < questionBatches.length; i++) {
+    const batch = questionBatches[i];
+    mark(`pool:${i + 1}/${questionBatches.length}:start`);
+    try {
+      const batchResult = await callStructuredModel(apiKey, poolPrompt, JSON.stringify({ sourceText, questions: batch }), poolSchema(batch.length), `distractor_candidate_pools_${i + 1}`, { model: DISTRACTOR_MODEL });
+      pools.pools.push(...(batchResult.pools ?? []));
+      mark(`pool:${i + 1}/${questionBatches.length}:complete`);
+    } catch (error) {
+      return json({ message: `Distractor candidate generation failed in batch ${i + 1}.`, detail: error instanceof Error ? error.message : undefined, stageTrace }, 502);
+    }
+  }
 
   const scorePrompt = `You are a skeptical assessment psychometrics reviewer. Score each candidate WITHOUT rewriting it. Plausibility 5 means a substantially-but-incompletely informed learner could sincerely choose it; 1 means absurd, irrelevant, or common-sense wrong. Parallelism 5 means same conceptual level, grammar, specificity, and length as the correct answer. Test-wise resistance 5 means no easy elimination cue. Also classify semantic correctness: clearly-wrong means the option is genuinely incorrect for this exact question; arguably-correct means a reasonable expert could defend it as answering the question; effectively-correct means it is a paraphrase, equivalent answer, or substantively correct alternative. Be especially alert to distractors that are attractive because they are actually correct. A candidate can score highly on plausibility and test-wise resistance and still be disqualified for alternative correctness. Be harsh and score the actual answer text, not its claimed rationale.`;
-  let scores: any;
-  try { scores = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: result.drafts, pools: pools.pools }), scoreSchema, "distractor_candidate_scores", { reasoningEffort: "high" }); }
-  catch { return json({ message: "Distractor scoring failed; no questions were accepted." }, 502); }
 
-  const diagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount);
+  const poolMap = new Map((pools.pools ?? []).map((p: any) => [p.questionId, p]));
+  const scores: any = { questions: [] };
+  for (let i = 0; i < questionBatches.length; i++) {
+    const batch = questionBatches[i];
+    const batchPools = batch.map((q: any) => poolMap.get(q.id)).filter(Boolean);
+    mark(`judge:${i + 1}/${questionBatches.length}:start`);
+    try {
+      const batchResult = await callStructuredModel(apiKey, scorePrompt, JSON.stringify({ sourceText, questions: batch, pools: batchPools }), scoreSchema(batch.length), `distractor_candidate_scores_${i + 1}`, { reasoningEffort: "high" });
+      scores.questions.push(...(batchResult.questions ?? []));
+      mark(`judge:${i + 1}/${questionBatches.length}:complete`);
+    } catch (error) {
+      const partialDiagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount, stageTrace);
+      return json({ message: `Distractor scoring failed in batch ${i + 1}.`, detail: error instanceof Error ? error.message : undefined, diagnostics: partialDiagnostics, stageTrace }, 502);
+    }
+  }
+
+  mark("assembly:start");
+  const diagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount, stageTrace);
   const assembled = assembleDeterministically(result, pools, scores);
+  mark(`assembly:complete:${assembled.drafts.length}`);
   if (!assembled.drafts.length) {
-    return json({ ok: false, drafts: [], rejectedCount: (result.drafts ?? []).length, warnings: ["No question had three distractors that passed the independent quality and semantic-correctness thresholds."], suitability: result.suitability, message: "Generation completed, but distractor quality was below threshold. Export generation diagnostics to inspect candidate scores.", provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: { ...diagnostics, finalAssembly: { mode: "deterministic", qualifiedQuestionIds: [], acceptedQuestionIds: [], selectedDistractors: {} } } });
+    return json({ ok: false, drafts: [], rejectedCount: (result.drafts ?? []).length, warnings: ["No question had three distractors that passed the independent quality and semantic-correctness thresholds."], suitability: result.suitability, message: "Generation completed, but distractor quality was below threshold. Export generation diagnostics to inspect candidate scores.", provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: { ...diagnostics, stageTrace, finalAssembly: { mode: "deterministic", qualifiedQuestionIds: [], acceptedQuestionIds: [], selectedDistractors: {} } } });
   }
 
   const normalized = normalizeDrafts({ drafts: assembled.drafts }, request, verificationTier);
   const acceptedIds = new Set(normalized.accepted.map((draft: any) => draft.id));
   const gateRejectedCount = Math.max(0, (result.drafts ?? []).length - assembled.qualifiedQuestionIds.length);
   const finalRejectedIds = assembled.qualifiedQuestionIds.filter((id: string) => !acceptedIds.has(id));
-  const finalDiagnostics = { ...diagnostics, finalAssembly: { mode: "deterministic", qualifiedQuestionIds: assembled.qualifiedQuestionIds, acceptedQuestionIds: [...acceptedIds], selectedDistractors: assembled.selectedByQuestion, validationRejections: normalized.rejected } };
+  mark(`validation:complete:${normalized.accepted.length}`);
+  const finalDiagnostics = { ...diagnostics, stageTrace, finalAssembly: { mode: "deterministic", qualifiedQuestionIds: assembled.qualifiedQuestionIds, acceptedQuestionIds: [...acceptedIds], selectedDistractors: assembled.selectedByQuestion, validationRejections: normalized.rejected } };
 
-  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: gateRejectedCount + finalRejectedIds.length, warnings: normalized.warnings, suitability: result.suitability, message: `${normalized.accepted.length} question${normalized.accepted.length === 1 ? "" : "s"} assembled deterministically after distractor qualification.`, provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: finalDiagnostics });
+  return json({ ok: normalized.accepted.length > 0, drafts: normalized.accepted, rejectedCount: gateRejectedCount + finalRejectedIds.length, warnings: normalized.warnings, suitability: result.suitability, message: `${normalized.accepted.length} question${normalized.accepted.length === 1 ? "" : "s"} assembled deterministically after batched distractor qualification.`, provider: "openai", model: DEFAULT_MODEL, distractorModel: DISTRACTOR_MODEL, verificationTier, diagnostics: finalDiagnostics, stageTrace });
 });
