@@ -5,11 +5,13 @@ const corsHeaders = {
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const DISTRACTOR_MODEL = "gpt-5.4";
-const HARNESS_VERSION = "1.8.3";
+const HARNESS_VERSION = "1.8.4";
 const PROMPT_VERSION = "2026-08-28.4";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
-const PASS_THRESHOLD = 4;
+const PLAUSIBILITY_THRESHOLD = 3;
+const PARALLELISM_THRESHOLD = 4;
+const TEST_WISE_RESISTANCE_THRESHOLD = 4;
 
 type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -164,6 +166,15 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
   return { accepted, rejectedCount, warnings };
 }
 
+function candidatePasses(score: any): boolean {
+  return Boolean(
+    score &&
+    score.plausibility >= PLAUSIBILITY_THRESHOLD &&
+    score.parallelism >= PARALLELISM_THRESHOLD &&
+    score.testWiseResistance >= TEST_WISE_RESISTANCE_THRESHOLD,
+  );
+}
+
 function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCount: number) {
   const poolMap = new Map((pools?.pools ?? []).map((p: any) => [p.questionId, p.candidates ?? []]));
   const scoreMap = new Map((scores?.questions ?? []).map((q: any) => [q.questionId, q.candidates ?? []]));
@@ -174,12 +185,6 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
     const scored: any[] = scoreMap.get(draft.id) ?? [];
     const candidates = pool.map((candidate: any) => {
       const score = scored.find((item: any) => item.text === candidate.text);
-      const passed = Boolean(
-        score &&
-        score.plausibility >= PASS_THRESHOLD &&
-        score.parallelism >= PASS_THRESHOLD &&
-        score.testWiseResistance >= PASS_THRESHOLD,
-      );
       return {
         text: candidate.text,
         misconception: candidate.misconception,
@@ -188,7 +193,7 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
         parallelism: score?.parallelism ?? null,
         testWiseResistance: score?.testWiseResistance ?? null,
         reason: score?.reason ?? "No matching judge score returned.",
-        passed,
+        passed: candidatePasses(score),
       };
     });
     const passedCandidateCount = candidates.filter((candidate: any) => candidate.passed).length;
@@ -210,9 +215,9 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
     generatedAt: new Date().toISOString(),
     targetQuestionCount,
     threshold: {
-      plausibility: PASS_THRESHOLD,
-      parallelism: PASS_THRESHOLD,
-      testWiseResistance: PASS_THRESHOLD,
+      plausibility: PLAUSIBILITY_THRESHOLD,
+      parallelism: PARALLELISM_THRESHOLD,
+      testWiseResistance: TEST_WISE_RESISTANCE_THRESHOLD,
       minimumPassingDistractors: 3,
     },
     models: {
@@ -395,9 +400,7 @@ Deno.serve(async (req) => {
   const qualified: any[] = [];
 
   for (const draft of result.drafts ?? []) {
-    const scored: any[] = (scoreMap.get(draft.id) ?? []).filter(
-      (c: any) => c.plausibility >= PASS_THRESHOLD && c.parallelism >= PASS_THRESHOLD && c.testWiseResistance >= PASS_THRESHOLD,
-    );
+    const scored: any[] = (scoreMap.get(draft.id) ?? []).filter((c: any) => candidatePasses(c));
     const originals: any[] = poolMap.get(draft.id) ?? [];
     const selected = scored.slice(0, 5).map((s: any) => ({
       ...s,
@@ -412,7 +415,7 @@ Deno.serve(async (req) => {
       ok: false,
       drafts: [],
       rejectedCount: (result.drafts ?? []).length,
-      warnings: ["No question had three distractors that passed the independent plausibility threshold."],
+      warnings: ["No question had three distractors that passed the independent quality thresholds."],
       suitability: result.suitability,
       message: "Generation completed, but distractor quality was below threshold. Export generation diagnostics to inspect candidate scores.",
       provider: "openai",
