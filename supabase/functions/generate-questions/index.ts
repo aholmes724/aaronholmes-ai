@@ -5,8 +5,8 @@ const corsHeaders = {
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const DISTRACTOR_MODEL = "gpt-5.4";
-const HARNESS_VERSION = "1.8.4";
-const PROMPT_VERSION = "2026-08-28.4";
+const HARNESS_VERSION = "1.8.5";
+const PROMPT_VERSION = "2026-08-28.5";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
 const PLAUSIBILITY_THRESHOLD = 3;
@@ -14,6 +14,7 @@ const PARALLELISM_THRESHOLD = 4;
 const TEST_WISE_RESISTANCE_THRESHOLD = 4;
 
 type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+type AlternativeCorrectness = "clearly-wrong" | "arguably-correct" | "effectively-correct";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -125,7 +126,7 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
   const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((o: any) => o.id));
   const conceptIds = new Set((request.curriculum?.concepts ?? []).map((c: any) => c.id));
   const accepted: any[] = [];
-  let rejectedCount = 0;
+  const rejected: { id: string; reason: string }[] = [];
   const warnings: string[] = [];
 
   for (const [index, raw] of (result?.drafts ?? []).entries()) {
@@ -142,8 +143,10 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
       raw.explanation.trim().length >= 30;
 
     if (!valid) {
-      rejectedCount++;
-      warnings.push(`Draft ${index + 1} failed grounding or shape checks and was rejected.`);
+      const id = typeof raw?.id === "string" ? raw.id : `draft-${index + 1}`;
+      const reason = "Failed grounding or final shape checks.";
+      rejected.push({ id, reason });
+      warnings.push(`${id} ${reason}`);
       continue;
     }
 
@@ -163,12 +166,13 @@ function normalizeDrafts(result: any, request: any, verificationTier: "classroom
       },
     });
   }
-  return { accepted, rejectedCount, warnings };
+  return { accepted, rejected, rejectedCount: rejected.length, warnings };
 }
 
 function candidatePasses(score: any): boolean {
   return Boolean(
     score &&
+    score.alternativeCorrectness === "clearly-wrong" &&
     score.plausibility >= PLAUSIBILITY_THRESHOLD &&
     score.parallelism >= PARALLELISM_THRESHOLD &&
     score.testWiseResistance >= TEST_WISE_RESISTANCE_THRESHOLD,
@@ -192,6 +196,8 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
         plausibility: score?.plausibility ?? null,
         parallelism: score?.parallelism ?? null,
         testWiseResistance: score?.testWiseResistance ?? null,
+        alternativeCorrectness: score?.alternativeCorrectness ?? null,
+        correctnessReason: score?.correctnessReason ?? "No semantic-correctness judgment returned.",
         reason: score?.reason ?? "No matching judge score returned.",
         passed: candidatePasses(score),
       };
@@ -218,6 +224,7 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
       plausibility: PLAUSIBILITY_THRESHOLD,
       parallelism: PARALLELISM_THRESHOLD,
       testWiseResistance: TEST_WISE_RESISTANCE_THRESHOLD,
+      alternativeCorrectness: "clearly-wrong",
       minimumPassingDistractors: 3,
     },
     models: {
@@ -231,6 +238,10 @@ function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCo
       firstPassQuestions: questions.length,
       passedDistractorGate: questions.filter((q: any) => q.outcome === "passed-distractor-gate").length,
       rejectedAtDistractorGate: questions.filter((q: any) => q.outcome === "rejected-distractor-gate").length,
+      alternativeCorrectCandidatesRejected: questions.reduce(
+        (total: number, q: any) => total + q.candidates.filter((c: any) => c.alternativeCorrectness !== "clearly-wrong").length,
+        0,
+      ),
     },
   };
 }
@@ -295,12 +306,14 @@ Deno.serve(async (req) => {
 
   const scoredCandidateSchema = {
     type: "object", additionalProperties: false,
-    required: ["text", "plausibility", "parallelism", "testWiseResistance", "reason"],
+    required: ["text", "plausibility", "parallelism", "testWiseResistance", "alternativeCorrectness", "correctnessReason", "reason"],
     properties: {
       text: { type: "string" },
       plausibility: { type: "integer", minimum: 1, maximum: 5 },
       parallelism: { type: "integer", minimum: 1, maximum: 5 },
       testWiseResistance: { type: "integer", minimum: 1, maximum: 5 },
+      alternativeCorrectness: { type: "string", enum: ["clearly-wrong", "arguably-correct", "effectively-correct"] },
+      correctnessReason: { type: "string" },
       reason: { type: "string" },
     },
   };
@@ -315,13 +328,19 @@ Deno.serve(async (req) => {
     type: "object", additionalProperties: false, required: ["questions"],
     properties: { questions: { type: "array", maxItems: targetQuestionCount, items: scoredQuestionSchema } },
   };
+  const assemblyRejectionSchema = {
+    type: "object", additionalProperties: false,
+    required: ["questionId", "reason"],
+    properties: { questionId: { type: "string" }, reason: { type: "string" } },
+  };
   const assemblySchema = {
     type: "object", additionalProperties: false,
-    required: ["suitability", "message", "drafts"],
+    required: ["suitability", "message", "drafts", "rejections"],
     properties: {
       suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
       message: { type: "string" },
       drafts: { type: "array", maxItems: targetQuestionCount, items: questionSchema },
+      rejections: { type: "array", maxItems: targetQuestionCount, items: assemblyRejectionSchema },
     },
   };
 
@@ -362,7 +381,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const poolPrompt = `You are a specialist assessment-item distractor writer. For each supplied question, IGNORE its provisional wrong answers. Keep the prompt and correct answer fixed. Generate 6-8 candidate WRONG answers from realistic partial knowledge. Each candidate must represent a specific misconception: nearby-concept confusion, right principle at wrong scope, wrong constraint optimization, partially correct action missing one requirement, default defeated by an exception, or realistic operational shortcut. No jokes, nonsense, reckless behavior, category mismatches, or common-sense wrong answers. Avoid giveaway absolutes. Match the correct answer's grammar, specificity, professionalism, and approximate length. Stay within the supplied source. Prefer distractors that would tempt a learner who understands much of the material but confuses two nearby concepts or applies the correct principle in the wrong context.`;
+  const poolPrompt = `You are a specialist assessment-item distractor writer. For each supplied question, IGNORE its provisional wrong answers. Keep the prompt and correct answer fixed. Generate 6-8 candidate WRONG answers from realistic partial knowledge. Each candidate must represent a specific misconception: nearby-concept confusion, right principle at wrong scope, wrong constraint optimization, partially correct action missing one requirement, default defeated by an exception, or realistic operational shortcut. No jokes, nonsense, reckless behavior, category mismatches, or common-sense wrong answers. Avoid giveaway absolutes. Match the correct answer's grammar, specificity, professionalism, and approximate length. Stay within the supplied source. Prefer distractors that would tempt a learner who understands much of the material but confuses two nearby concepts or applies the correct principle in the wrong context. Do not intentionally generate a paraphrase or alternate formulation that could also correctly answer the question.`;
 
   let pools: any;
   try {
@@ -378,7 +397,7 @@ Deno.serve(async (req) => {
     return json({ message: "Distractor candidate generation failed; no first-pass questions were accepted." }, 502);
   }
 
-  const scorePrompt = `You are a skeptical assessment psychometrics reviewer. Score each candidate WITHOUT rewriting it. Plausibility 5 means a substantially-but-incompletely informed learner could sincerely choose it; 1 means absurd, irrelevant, or common-sense wrong. Parallelism 5 means same conceptual level, grammar, specificity, and length as the correct answer. Test-wise resistance 5 means no easy elimination cue. Be harsh and score the actual answer text, not its claimed rationale.`;
+  const scorePrompt = `You are a skeptical assessment psychometrics reviewer. Score each candidate WITHOUT rewriting it. Plausibility 5 means a substantially-but-incompletely informed learner could sincerely choose it; 1 means absurd, irrelevant, or common-sense wrong. Parallelism 5 means same conceptual level, grammar, specificity, and length as the correct answer. Test-wise resistance 5 means no easy elimination cue. Also classify semantic correctness: clearly-wrong means the option is genuinely incorrect for this exact question; arguably-correct means a reasonable expert could defend it as answering the question; effectively-correct means it is a paraphrase, equivalent answer, or substantively correct alternative. Be especially alert to distractors that are attractive because they are actually correct. A candidate can score highly on plausibility and test-wise resistance and still be disqualified for alternative correctness. Be harsh and score the actual answer text, not its claimed rationale.`;
 
   let scores: any;
   try {
@@ -415,7 +434,7 @@ Deno.serve(async (req) => {
       ok: false,
       drafts: [],
       rejectedCount: (result.drafts ?? []).length,
-      warnings: ["No question had three distractors that passed the independent quality thresholds."],
+      warnings: ["No question had three distractors that passed the independent quality and semantic-correctness thresholds."],
       suitability: result.suitability,
       message: "Generation completed, but distractor quality was below threshold. Export generation diagnostics to inspect candidate scores.",
       provider: "openai",
@@ -426,7 +445,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const assemblyPrompt = `You are the final assessment editor. Assemble only supplied qualified questions. Preserve id, semanticKey, grounding IDs, source evidence, and correct-answer meaning. Choose exactly THREE supplied qualified distractors; invent none. Keep four choices and exactly one correct. Lightly edit wording only for parallelism without changing meaning. If test-taking cues still reveal the answer, OMIT the question.`;
+  const assemblyPrompt = `You are the final assessment editor. Account for EVERY supplied qualified question exactly once: either return it in drafts or return its questionId and a concrete reason in rejections. Do not silently omit any question. Preserve id, semanticKey, grounding IDs, source evidence, and correct-answer meaning. Choose exactly THREE supplied qualified distractors; invent none. Keep four choices and exactly one correct. Lightly edit wording only for parallelism without changing meaning. Reject a question only if the assembled four-option item still has a serious test-taking cue, ambiguity, or more than one defensible correct answer. If you reject it, state the specific reason.`;
 
   let assembled: any;
   try {
@@ -441,22 +460,42 @@ Deno.serve(async (req) => {
     return json({ message: "Final question assembly failed.", diagnostics }, 502);
   }
 
-  const normalized = normalizeDrafts(assembled, request, verificationTier);
-  normalized.rejectedCount += Math.max(0, (result.drafts ?? []).length - qualified.length);
+  const qualifiedIds = qualified.map((item: any) => item.draft.id);
   const assembledIds = new Set((assembled.drafts ?? []).map((draft: any) => draft.id));
+  const reportedRejections = new Map(
+    (assembled.rejections ?? []).map((item: any) => [item.questionId, item.reason]),
+  );
+  const unreportedIds = qualifiedIds.filter((id: string) => !assembledIds.has(id) && !reportedRejections.has(id));
+  for (const id of unreportedIds) {
+    reportedRejections.set(id, "Final assembler returned no decision for this qualified question.");
+  }
+
+  const normalized = normalizeDrafts(assembled, request, verificationTier);
+  const acceptedIds = new Set(normalized.accepted.map((draft: any) => draft.id));
+  for (const rejected of normalized.rejected) {
+    if (!reportedRejections.has(rejected.id)) reportedRejections.set(rejected.id, rejected.reason);
+  }
+
+  const gateRejectedCount = Math.max(0, (result.drafts ?? []).length - qualified.length);
+  const finalRejectedIds = qualifiedIds.filter((id: string) => !acceptedIds.has(id));
   const finalDiagnostics = {
     ...diagnostics,
     finalAssembly: {
-      qualifiedQuestionIds: qualified.map((item: any) => item.draft.id),
+      qualifiedQuestionIds: qualifiedIds,
       assembledQuestionIds: [...assembledIds],
-      omittedAfterAssemblyIds: qualified.map((item: any) => item.draft.id).filter((id: string) => !assembledIds.has(id)),
+      acceptedQuestionIds: [...acceptedIds],
+      rejections: finalRejectedIds.map((id: string) => ({
+        questionId: id,
+        reason: reportedRejections.get(id) ?? "Question did not survive final validation.",
+      })),
+      unreportedByAssemblerIds: unreportedIds,
     },
   };
 
   return json({
     ok: normalized.accepted.length > 0,
     drafts: normalized.accepted,
-    rejectedCount: normalized.rejectedCount,
+    rejectedCount: gateRejectedCount + finalRejectedIds.length,
     warnings: normalized.warnings,
     suitability: assembled.suitability || result.suitability,
     message: assembled.message || result.message,
