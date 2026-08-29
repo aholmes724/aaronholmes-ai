@@ -5,10 +5,11 @@ const corsHeaders = {
 
 const DEFAULT_MODEL = "gpt-5.4-mini";
 const DISTRACTOR_MODEL = "gpt-5.4";
-const HARNESS_VERSION = "1.8.2";
-const PROMPT_VERSION = "2026-08-28.3";
+const HARNESS_VERSION = "1.8.3";
+const PROMPT_VERSION = "2026-08-28.4";
 const MAX_SOURCE_CHARS = 60_000;
 const MAX_QUESTIONS = 30;
+const PASS_THRESHOLD = 4;
 
 type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -44,14 +45,7 @@ async function callStructuredModel(
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: schemaName,
-        strict: true,
-        schema,
-      },
-    },
+    text: { format: { type: "json_schema", name: schemaName, strict: true, schema } },
   };
   if (options.reasoningEffort) payload.reasoning = { effort: options.reasoningEffort };
 
@@ -84,38 +78,22 @@ function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], concept
     type: "object",
     additionalProperties: false,
     required: [
-      "id",
-      "semanticKey",
-      "prompt",
-      "answers",
-      "topic",
-      "conceptIds",
-      "masteryConcept",
-      "learningObjectiveId",
-      "difficulty",
-      "learningStage",
-      "explanation",
-      "sourceId",
-      "sourceReference",
-      "sourceEvidence",
+      "id", "semanticKey", "prompt", "answers", "topic", "conceptIds", "masteryConcept",
+      "learningObjectiveId", "difficulty", "learningStage", "explanation", "sourceId",
+      "sourceReference", "sourceEvidence",
     ],
     properties: {
       id: { type: "string" },
       semanticKey: { type: "string" },
       prompt: { type: "string" },
       answers: {
-        type: "array",
-        minItems: 4,
-        maxItems: 4,
+        type: "array", minItems: 4, maxItems: 4,
         items: {
-          type: "object",
-          additionalProperties: false,
+          type: "object", additionalProperties: false,
           required: ["id", "text", "correct", "feedback"],
           properties: {
-            id: { type: "string" },
-            text: { type: "string" },
-            correct: { type: "boolean" },
-            feedback: { type: "string" },
+            id: { type: "string" }, text: { type: "string" },
+            correct: { type: "boolean" }, feedback: { type: "string" },
           },
         },
       },
@@ -129,25 +107,18 @@ function baseQuestionSchema(sourceIds: string[], objectiveIds: string[], concept
       sourceId: { type: "string", enum: sourceIds },
       sourceReference: { type: "string" },
       sourceEvidence: {
-        type: "object",
-        additionalProperties: false,
+        type: "object", additionalProperties: false,
         required: ["sourceId", "reference", "excerpt", "locator"],
         properties: {
           sourceId: { type: "string", enum: sourceIds },
-          reference: { type: "string" },
-          excerpt: { type: "string" },
-          locator: { type: "string" },
+          reference: { type: "string" }, excerpt: { type: "string" }, locator: { type: "string" },
         },
       },
     },
   };
 }
 
-function normalizeDrafts(
-  result: any,
-  request: any,
-  verificationTier: "classroom" | "high-assurance",
-) {
+function normalizeDrafts(result: any, request: any, verificationTier: "classroom" | "high-assurance") {
   const sourceIds = new Set((request.curriculum?.sources ?? []).map((s: any) => s.id));
   const objectiveIds = new Set((request.curriculum?.learningObjectives ?? []).map((o: any) => o.id));
   const conceptIds = new Set((request.curriculum?.concepts ?? []).map((c: any) => c.id));
@@ -160,16 +131,13 @@ function normalizeDrafts(
     const evidence = raw.sourceEvidence;
     const valid =
       typeof raw.prompt === "string" && raw.prompt.trim().length >= 12 &&
-      answers.length === 4 &&
-      answers.filter((a: any) => a?.correct === true).length === 1 &&
-      sourceIds.has(raw.sourceId) &&
-      objectiveIds.has(raw.learningObjectiveId) &&
-      conceptIds.has(raw.masteryConcept) &&
-      Array.isArray(raw.conceptIds) && raw.conceptIds.length > 0 &&
-      raw.conceptIds.every((id: string) => conceptIds.has(id)) &&
-      evidence && evidence.sourceId === raw.sourceId &&
-      typeof evidence.excerpt === "string" && evidence.excerpt.trim().length >= 12 &&
-      typeof raw.explanation === "string" && raw.explanation.trim().length >= 30;
+      answers.length === 4 && answers.filter((a: any) => a?.correct === true).length === 1 &&
+      sourceIds.has(raw.sourceId) && objectiveIds.has(raw.learningObjectiveId) &&
+      conceptIds.has(raw.masteryConcept) && Array.isArray(raw.conceptIds) && raw.conceptIds.length > 0 &&
+      raw.conceptIds.every((id: string) => conceptIds.has(id)) && evidence &&
+      evidence.sourceId === raw.sourceId && typeof evidence.excerpt === "string" &&
+      evidence.excerpt.trim().length >= 12 && typeof raw.explanation === "string" &&
+      raw.explanation.trim().length >= 30;
 
     if (!valid) {
       rejectedCount++;
@@ -193,8 +161,73 @@ function normalizeDrafts(
       },
     });
   }
-
   return { accepted, rejectedCount, warnings };
+}
+
+function buildDiagnostics(result: any, pools: any, scores: any, targetQuestionCount: number) {
+  const poolMap = new Map((pools?.pools ?? []).map((p: any) => [p.questionId, p.candidates ?? []]));
+  const scoreMap = new Map((scores?.questions ?? []).map((q: any) => [q.questionId, q.candidates ?? []]));
+
+  const questions = (result?.drafts ?? []).map((draft: any) => {
+    const correctAnswer = (draft.answers ?? []).find((a: any) => a.correct === true)?.text ?? "";
+    const pool: any[] = poolMap.get(draft.id) ?? [];
+    const scored: any[] = scoreMap.get(draft.id) ?? [];
+    const candidates = pool.map((candidate: any) => {
+      const score = scored.find((item: any) => item.text === candidate.text);
+      const passed = Boolean(
+        score &&
+        score.plausibility >= PASS_THRESHOLD &&
+        score.parallelism >= PASS_THRESHOLD &&
+        score.testWiseResistance >= PASS_THRESHOLD,
+      );
+      return {
+        text: candidate.text,
+        misconception: candidate.misconception,
+        whyTempting: candidate.whyTempting,
+        plausibility: score?.plausibility ?? null,
+        parallelism: score?.parallelism ?? null,
+        testWiseResistance: score?.testWiseResistance ?? null,
+        reason: score?.reason ?? "No matching judge score returned.",
+        passed,
+      };
+    });
+    const passedCandidateCount = candidates.filter((candidate: any) => candidate.passed).length;
+    return {
+      questionId: draft.id,
+      prompt: draft.prompt,
+      correctAnswer,
+      learningStage: draft.learningStage,
+      difficulty: draft.difficulty,
+      passedCandidateCount,
+      outcome: passedCandidateCount >= 3 ? "passed-distractor-gate" : "rejected-distractor-gate",
+      candidates,
+    };
+  });
+
+  return {
+    harnessVersion: HARNESS_VERSION,
+    promptVersion: PROMPT_VERSION,
+    generatedAt: new Date().toISOString(),
+    targetQuestionCount,
+    threshold: {
+      plausibility: PASS_THRESHOLD,
+      parallelism: PASS_THRESHOLD,
+      testWiseResistance: PASS_THRESHOLD,
+      minimumPassingDistractors: 3,
+    },
+    models: {
+      stemAndCorrectAnswer: DEFAULT_MODEL,
+      distractorCandidates: DISTRACTOR_MODEL,
+      distractorJudge: `${DEFAULT_MODEL} (high reasoning)`,
+      finalAssembly: DEFAULT_MODEL,
+    },
+    questions,
+    summary: {
+      firstPassQuestions: questions.length,
+      passedDistractorGate: questions.filter((q: any) => q.outcome === "passed-distractor-gate").length,
+      rejectedAtDistractorGate: questions.filter((q: any) => q.outcome === "rejected-distractor-gate").length,
+    },
+  };
 }
 
 Deno.serve(async (req) => {
@@ -205,11 +238,7 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ message: "OPENAI_API_KEY is not configured on the server." }, 500);
 
   let request: any;
-  try {
-    request = await req.json();
-  } catch {
-    return json({ message: "Invalid JSON request." }, 400);
-  }
+  try { request = await req.json(); } catch { return json({ message: "Invalid JSON request." }, 400); }
 
   const sourceText = typeof request?.sourceText === "string" ? request.sourceText.trim() : "";
   const curriculum = request?.curriculum;
@@ -228,8 +257,7 @@ Deno.serve(async (req) => {
   const questionSchema = baseQuestionSchema(sourceIds, objectiveIds, conceptIds);
 
   const generationSchema = {
-    type: "object",
-    additionalProperties: false,
+    type: "object", additionalProperties: false,
     required: ["suitability", "message", "drafts"],
     properties: {
       suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
@@ -239,41 +267,29 @@ Deno.serve(async (req) => {
   };
 
   const candidateSchema = {
-    type: "object",
-    additionalProperties: false,
+    type: "object", additionalProperties: false,
     required: ["questionId", "candidates"],
     properties: {
       questionId: { type: "string" },
       candidates: {
-        type: "array",
-        minItems: 6,
-        maxItems: 8,
+        type: "array", minItems: 6, maxItems: 8,
         items: {
-          type: "object",
-          additionalProperties: false,
+          type: "object", additionalProperties: false,
           required: ["text", "misconception", "whyTempting"],
           properties: {
-            text: { type: "string" },
-            misconception: { type: "string" },
-            whyTempting: { type: "string" },
+            text: { type: "string" }, misconception: { type: "string" }, whyTempting: { type: "string" },
           },
         },
       },
     },
   };
-
   const poolSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["pools"],
-    properties: {
-      pools: { type: "array", maxItems: targetQuestionCount, items: candidateSchema },
-    },
+    type: "object", additionalProperties: false, required: ["pools"],
+    properties: { pools: { type: "array", maxItems: targetQuestionCount, items: candidateSchema } },
   };
 
   const scoredCandidateSchema = {
-    type: "object",
-    additionalProperties: false,
+    type: "object", additionalProperties: false,
     required: ["text", "plausibility", "parallelism", "testWiseResistance", "reason"],
     properties: {
       text: { type: "string" },
@@ -283,29 +299,19 @@ Deno.serve(async (req) => {
       reason: { type: "string" },
     },
   };
-
   const scoredQuestionSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["questionId", "candidates"],
+    type: "object", additionalProperties: false, required: ["questionId", "candidates"],
     properties: {
       questionId: { type: "string" },
       candidates: { type: "array", minItems: 6, maxItems: 8, items: scoredCandidateSchema },
     },
   };
-
   const scoreSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["questions"],
-    properties: {
-      questions: { type: "array", maxItems: targetQuestionCount, items: scoredQuestionSchema },
-    },
+    type: "object", additionalProperties: false, required: ["questions"],
+    properties: { questions: { type: "array", maxItems: targetQuestionCount, items: scoredQuestionSchema } },
   };
-
   const assemblySchema = {
-    type: "object",
-    additionalProperties: false,
+    type: "object", additionalProperties: false,
     required: ["suitability", "message", "drafts"],
     properties: {
       suitability: { type: "string", enum: ["allowed", "limited", "blocked"] },
@@ -346,14 +352,8 @@ Deno.serve(async (req) => {
 
   if (result.suitability === "blocked") {
     return json({
-      ok: false,
-      drafts: [],
-      rejectedCount: 0,
-      warnings: [],
-      suitability: "blocked",
-      message: result.message,
-      provider: "openai",
-      model: DEFAULT_MODEL,
+      ok: false, drafts: [], rejectedCount: 0, warnings: [], suitability: "blocked",
+      message: result.message, provider: "openai", model: DEFAULT_MODEL,
     });
   }
 
@@ -389,13 +389,14 @@ Deno.serve(async (req) => {
     return json({ message: "Distractor scoring failed; no questions were accepted." }, 502);
   }
 
+  const diagnostics = buildDiagnostics(result, pools, scores, targetQuestionCount);
   const scoreMap = new Map((scores.questions ?? []).map((q: any) => [q.questionId, q.candidates]));
   const poolMap = new Map((pools.pools ?? []).map((p: any) => [p.questionId, p.candidates]));
   const qualified: any[] = [];
 
   for (const draft of result.drafts ?? []) {
     const scored: any[] = (scoreMap.get(draft.id) ?? []).filter(
-      (c: any) => c.plausibility >= 4 && c.parallelism >= 4 && c.testWiseResistance >= 4,
+      (c: any) => c.plausibility >= PASS_THRESHOLD && c.parallelism >= PASS_THRESHOLD && c.testWiseResistance >= PASS_THRESHOLD,
     );
     const originals: any[] = poolMap.get(draft.id) ?? [];
     const selected = scored.slice(0, 5).map((s: any) => ({
@@ -413,11 +414,12 @@ Deno.serve(async (req) => {
       rejectedCount: (result.drafts ?? []).length,
       warnings: ["No question had three distractors that passed the independent plausibility threshold."],
       suitability: result.suitability,
-      message: "Generation completed, but distractor quality was below threshold. Try again or use a richer source.",
+      message: "Generation completed, but distractor quality was below threshold. Export generation diagnostics to inspect candidate scores.",
       provider: "openai",
       model: DEFAULT_MODEL,
       distractorModel: DISTRACTOR_MODEL,
       verificationTier,
+      diagnostics,
     });
   }
 
@@ -433,11 +435,20 @@ Deno.serve(async (req) => {
       "assembled_quality_questions",
     );
   } catch {
-    return json({ message: "Final question assembly failed." }, 502);
+    return json({ message: "Final question assembly failed.", diagnostics }, 502);
   }
 
   const normalized = normalizeDrafts(assembled, request, verificationTier);
   normalized.rejectedCount += Math.max(0, (result.drafts ?? []).length - qualified.length);
+  const assembledIds = new Set((assembled.drafts ?? []).map((draft: any) => draft.id));
+  const finalDiagnostics = {
+    ...diagnostics,
+    finalAssembly: {
+      qualifiedQuestionIds: qualified.map((item: any) => item.draft.id),
+      assembledQuestionIds: [...assembledIds],
+      omittedAfterAssemblyIds: qualified.map((item: any) => item.draft.id).filter((id: string) => !assembledIds.has(id)),
+    },
+  };
 
   return json({
     ok: normalized.accepted.length > 0,
@@ -450,5 +461,6 @@ Deno.serve(async (req) => {
     model: DEFAULT_MODEL,
     distractorModel: DISTRACTOR_MODEL,
     verificationTier,
+    diagnostics: finalDiagnostics,
   });
 });
