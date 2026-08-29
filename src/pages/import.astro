@@ -11,7 +11,7 @@ import Layout from "../layouts/Layout.astro";
         <section class="progress-summary">
             <h2>Source material</h2>
             <p>Upload plain text or Markdown to create a curriculum structure, or load an existing portable JSON curriculum package.</p>
-            <label for="curriculum-file"><strong>Choose .txt, .md, or curriculum .json</strong></label>
+            <label for="curriculum-file"><strong>Choose .txt, .md, or .json</strong></label>
             <input id="curriculum-file" type="file" accept="text/plain,text/markdown,application/json,.txt,.md,.markdown,.json" />
             <p><label for="verification-tier"><strong>Source verification</strong></label><br />
                 <select id="verification-tier">
@@ -177,7 +177,7 @@ import Layout from "../layouts/Layout.astro";
         const save = document.createElement("button");
         save.className = "secondary-button";
         save.type = "button";
-        save.textContent = stats.practiceReady ? "Save curriculum" : "Save curriculum structure";
+        save.textContent = "Save curriculum";
         save.addEventListener("click", () => {
             if (!pendingCurriculum) return;
             saveImportedCurriculum(pendingCurriculum);
