@@ -8,6 +8,8 @@ export interface DistractorCandidateDiagnostic {
     plausibility: number | null;
     parallelism: number | null;
     testWiseResistance: number | null;
+    alternativeCorrectness?: "clearly-wrong" | "arguably-correct" | "effectively-correct" | null;
+    correctnessReason?: string;
     reason: string;
     passed: boolean;
 }
@@ -25,13 +27,23 @@ export interface QuestionGenerationDiagnostic {
 
 export interface GenerationDiagnostics {
     harnessVersion: string;
+    qualityRecipeVersion?: string;
     promptVersion: string;
     generatedAt: string;
     targetQuestionCount: number;
+    batching?: {
+        batchSize: number;
+        poolBatches: number;
+        judgeBatches: number;
+        executionMode?: string;
+        judgeMode?: string;
+    };
+    stageTrace?: string[];
     threshold: {
         plausibility: number;
         parallelism: number;
         testWiseResistance: number;
+        alternativeCorrectness?: string;
         minimumPassingDistractors: number;
     };
     models: {
@@ -45,12 +57,9 @@ export interface GenerationDiagnostics {
         firstPassQuestions: number;
         passedDistractorGate: number;
         rejectedAtDistractorGate: number;
+        alternativeCorrectCandidatesRejected?: number;
     };
-    finalAssembly?: {
-        qualifiedQuestionIds: string[];
-        assembledQuestionIds: string[];
-        omittedAfterAssemblyIds: string[];
-    };
+    finalAssembly?: Record<string, unknown>;
 }
 
 export interface GenerationApiResult {
@@ -64,11 +73,34 @@ export interface GenerationApiResult {
     model?: string;
     distractorModel?: string;
     diagnostics?: GenerationDiagnostics;
+    stageTrace?: string[];
+}
+
+interface StageResponse {
+    ok?: boolean;
+    message?: string;
+    detail?: string;
+    stage?: string;
+    result?: any;
+    pools?: { pools?: any[] };
+    scores?: { questions?: any[] };
+    targetQuestionCount?: number;
+    verificationTier?: "classroom" | "high-assurance";
+    stageTrace?: string[];
+    diagnostics?: GenerationDiagnostics;
+    drafts?: CurriculumQuestionDraft[];
+    rejectedCount?: number;
+    warnings?: string[];
+    suitability?: "allowed" | "limited" | "blocked";
+    provider?: string;
+    model?: string;
+    distractorModel?: string;
 }
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL?.trim();
 const supabaseKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
 const DIAGNOSTICS_KEY = "aaronholmes.generation-diagnostics";
+const BATCH_SIZE = 3;
 
 export function isQuestionGenerationConfigured(): boolean {
     return Boolean(supabaseUrl && supabaseKey);
@@ -106,19 +138,17 @@ export function exportGenerationDiagnostics(): void {
     URL.revokeObjectURL(url);
 }
 
-export async function generateQuestionDrafts(
-    request: QuestionGenerationRequest,
-): Promise<GenerationApiResult> {
-    saveGenerationDiagnostics();
+function chunk<T>(items: T[], size: number): T[][] {
+    const output: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+        output.push(items.slice(index, index + size));
+    }
+    return output;
+}
 
+async function callGenerationStage(body: Record<string, unknown>): Promise<StageResponse> {
     if (!supabaseUrl || !supabaseKey) {
-        return {
-            ok: false,
-            drafts: [],
-            rejectedCount: 0,
-            warnings: [],
-            message: "Question generation is not configured.",
-        };
+        throw new Error("Question generation is not configured.");
     }
 
     const response = await fetch(`${supabaseUrl}/functions/v1/generate-questions`, {
@@ -128,24 +158,116 @@ export async function generateQuestionDrafts(
             apikey: supabaseKey,
             Authorization: `Bearer ${supabaseKey}`,
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(body),
     });
 
-    const payload = (await response.json().catch(() => null)) as GenerationApiResult | null;
-    if (payload?.diagnostics) saveGenerationDiagnostics(payload.diagnostics);
-
+    const payload = await response.json().catch(() => null) as StageResponse | null;
     if (!response.ok || !payload) {
-        return {
-            ok: false,
-            drafts: [],
-            rejectedCount: 0,
-            warnings: [],
-            message: payload?.message || `Generation failed with HTTP ${response.status}.`,
-            diagnostics: payload?.diagnostics,
-        };
+        throw new Error(payload?.message || `Generation failed with HTTP ${response.status}.`);
+    }
+    return payload;
+}
+
+function failedResult(message: string, diagnostics?: GenerationDiagnostics): GenerationApiResult {
+    return {
+        ok: false,
+        drafts: [],
+        rejectedCount: 0,
+        warnings: [],
+        message,
+        diagnostics,
+    };
+}
+
+export async function generateQuestionDrafts(
+    request: QuestionGenerationRequest,
+): Promise<GenerationApiResult> {
+    // Keep previous diagnostics until a new run successfully reaches finalization. This makes
+    // a platform failure inspectable without falsely presenting stale diagnostics as current.
+    if (!supabaseUrl || !supabaseKey) {
+        return failedResult("Question generation is not configured.");
     }
 
-    return payload;
+    const stageTrace: string[] = [];
+
+    try {
+        const stemsResponse = await callGenerationStage({ ...request, stage: "stems" });
+        stageTrace.push(...(stemsResponse.stageTrace ?? []).map((entry) => `stems:${entry}`));
+
+        const result = stemsResponse.result;
+        if (!result) return failedResult(stemsResponse.message || "Stem generation returned no result.");
+
+        if (result.suitability === "blocked") {
+            return {
+                ok: false,
+                drafts: [],
+                rejectedCount: 0,
+                warnings: [],
+                suitability: "blocked",
+                message: result.message,
+                stageTrace,
+            };
+        }
+
+        const questionBatches = chunk<any>(result.drafts ?? [], BATCH_SIZE);
+        const allPools: any[] = [];
+
+        for (let index = 0; index < questionBatches.length; index += 1) {
+            const poolResponse = await callGenerationStage({
+                ...request,
+                stage: "pool",
+                questions: questionBatches[index],
+            });
+            stageTrace.push(...(poolResponse.stageTrace ?? []).map((entry) => `pool:${index + 1}/${questionBatches.length}:${entry}`));
+            allPools.push(...(poolResponse.pools?.pools ?? []));
+        }
+
+        const poolMap = new Map(allPools.map((pool: any) => [pool.questionId, pool]));
+        const judgeResponses = await Promise.all(questionBatches.map(async (batch, index) => {
+            const pools = batch.map((question: any) => poolMap.get(question.id)).filter(Boolean);
+            const response = await callGenerationStage({
+                ...request,
+                stage: "judge",
+                questions: batch,
+                pools,
+            });
+            return { index, response };
+        }));
+
+        const allScores: any[] = [];
+        for (const { index, response } of judgeResponses.sort((a, b) => a.index - b.index)) {
+            stageTrace.push(...(response.stageTrace ?? []).map((entry) => `judge:${index + 1}/${questionBatches.length}:${entry}`));
+            allScores.push(...(response.scores?.questions ?? []));
+        }
+
+        const finalResponse = await callGenerationStage({
+            ...request,
+            stage: "finalize",
+            result,
+            allPools: { pools: allPools },
+            allScores: { questions: allScores },
+            stageTrace,
+        });
+
+        if (finalResponse.diagnostics) saveGenerationDiagnostics(finalResponse.diagnostics);
+
+        return {
+            ok: Boolean(finalResponse.ok),
+            drafts: finalResponse.drafts ?? [],
+            rejectedCount: finalResponse.rejectedCount ?? 0,
+            warnings: finalResponse.warnings ?? [],
+            suitability: finalResponse.suitability,
+            message: finalResponse.message,
+            provider: finalResponse.provider,
+            model: finalResponse.model,
+            distractorModel: finalResponse.distractorModel,
+            diagnostics: finalResponse.diagnostics,
+            stageTrace: finalResponse.stageTrace,
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Question generation failed.";
+        return failedResult(message);
+    }
 }
 
 export function mergeGeneratedDrafts(
