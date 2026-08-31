@@ -8,17 +8,27 @@ const IMPORTED_CURRICULUM_KEY = "aaronholmes.imported-curriculum";
 export interface StoredCurriculum {
     curriculum: CurriculumPackage;
     savedAt: string;
+    sourceText?: string;
 }
 
-export function saveImportedCurriculum(curriculum: CurriculumPackage): StoredCurriculum {
+export function saveImportedCurriculum(
+    curriculum: CurriculumPackage,
+    sourceText?: string,
+): StoredCurriculum {
     const validation = validateCurriculumPackage(curriculum);
     if (!validation.valid) {
         throw new Error(validation.issues.map((issue) => `${issue.path}: ${issue.message}`).join("\n"));
     }
 
+    const previous = readImportedCurriculum();
     const stored: StoredCurriculum = {
         curriculum,
         savedAt: new Date().toISOString(),
+        ...(sourceText?.trim()
+            ? { sourceText }
+            : previous?.curriculum.id === curriculum.id && previous.sourceText
+                ? { sourceText: previous.sourceText }
+                : {}),
     };
     localStorage.setItem(IMPORTED_CURRICULUM_KEY, JSON.stringify(stored));
     return stored;
