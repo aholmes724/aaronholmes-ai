@@ -36,6 +36,12 @@ import Layout from "../../layouts/Layout.astro";
     import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
     import { savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
     import {
+        generateLearningReview,
+        isLearningReviewConfigured,
+        type LearningReview,
+        type LearningReviewTerm,
+    } from "../../data/curriculum/learning-review-client";
+    import {
         removeQuestionFeedback,
         saveQuestionFeedback,
         QUESTION_FEEDBACK_REASONS,
@@ -89,6 +95,7 @@ import Layout from "../../layouts/Layout.astro";
     }));
     const sessionId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
+    const learningReviewCache = new Map<string, LearningReview>();
     let current = 0;
     let score = 0;
     let answered = false;
@@ -161,13 +168,66 @@ import Layout from "../../layouts/Layout.astro";
     const formatReason = (reason: QuestionFeedbackReason) =>
         reason.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
 
+    const getDraft = (questionId: string) =>
+        stored?.curriculum.questionDrafts.find((item) => item.id === questionId);
+
+    const getConceptLabel = (question: (typeof questions)[number]) => {
+        const draft = getDraft(question.id);
+        const conceptId = draft?.masteryConcept || question.masteryConcept;
+        return stored?.curriculum.concepts.find((concept) => concept.id === conceptId)?.label
+            || question.topic
+            || "this concept";
+    };
+
+    const appendRichText = (
+        parent: HTMLElement,
+        text: string,
+        terms: LearningReviewTerm[] = [],
+    ) => {
+        const usableTerms = terms
+            .filter((term) => term.term.trim() && term.expansion.trim())
+            .sort((a, b) => b.term.length - a.term.length);
+
+        if (!usableTerms.length) {
+            parent.append(document.createTextNode(text));
+            return;
+        }
+
+        const escaped = usableTerms.map((term) => term.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "g");
+        const byTerm = new Map(usableTerms.map((term) => [term.term, term]));
+        let cursor = 0;
+
+        for (const match of text.matchAll(pattern)) {
+            const index = match.index ?? 0;
+            if (index > cursor) parent.append(document.createTextNode(text.slice(cursor, index)));
+            const term = byTerm.get(match[0]);
+            if (term) {
+                const abbr = document.createElement("abbr");
+                abbr.className = "initialism-help";
+                abbr.tabIndex = 0;
+                abbr.textContent = term.term;
+                abbr.title = `${term.expansion}: ${term.definition}`;
+                abbr.dataset.tooltip = `${term.expansion} — ${term.definition}`;
+                abbr.setAttribute("aria-label", `${term.term}: ${term.expansion}. ${term.definition}`);
+                parent.append(abbr);
+            } else {
+                parent.append(document.createTextNode(match[0]));
+            }
+            cursor = index + match[0].length;
+        }
+
+        if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+    };
+
     const appendSourceAndFeedback = (question: (typeof questions)[number], review: HTMLElement) => {
-        const draft = stored?.curriculum.questionDrafts.find((item) => item.id === question.id);
+        const draft = getDraft(question.id);
 
         if (draft?.sourceEvidence?.excerpt) {
             const source = document.createElement("details");
+            source.className = "source-evidence";
             const sourceSummary = document.createElement("summary");
-            sourceSummary.textContent = "Source";
+            sourceSummary.textContent = "Source evidence";
             const reference = document.createElement("p");
             const strong = document.createElement("strong");
             strong.textContent = draft.sourceEvidence.reference || draft.sourceReference;
@@ -235,6 +295,192 @@ import Layout from "../../layouts/Layout.astro";
         review.append(feedback);
     };
 
+    const renderLearningReview = (
+        card: HTMLElement,
+        learningReview: LearningReview,
+        sourceReference: string,
+        sourceExcerpt: string,
+    ) => {
+        card.replaceChildren();
+
+        const heading = document.createElement("h3");
+        heading.textContent = learningReview.title;
+        const keyIdea = document.createElement("p");
+        keyIdea.className = "learning-review-key-idea";
+        appendRichText(keyIdea, learningReview.keyIdea, learningReview.keyTerms);
+        card.append(heading, keyIdea);
+
+        if (learningReview.clues.length) {
+            const clueHeading = document.createElement("h4");
+            clueHeading.textContent = "Why the clues matter";
+            const clueList = document.createElement("dl");
+            clueList.className = "learning-review-clues";
+            learningReview.clues.forEach((item) => {
+                const term = document.createElement("dt");
+                appendRichText(term, item.clue, learningReview.keyTerms);
+                const explanation = document.createElement("dd");
+                appendRichText(explanation, item.explanation, learningReview.keyTerms);
+                clueList.append(term, explanation);
+            });
+            card.append(clueHeading, clueList);
+        }
+
+        if (learningReview.memoryHook) {
+            const memory = document.createElement("p");
+            memory.className = "learning-review-memory";
+            const label = document.createElement("strong");
+            label.textContent = "Remember: ";
+            memory.append(label);
+            appendRichText(memory, learningReview.memoryHook, learningReview.keyTerms);
+            card.append(memory);
+        }
+
+        if (sourceExcerpt) {
+            const source = document.createElement("details");
+            source.className = "learning-review-source";
+            source.open = true;
+            const summary = document.createElement("summary");
+            summary.textContent = "Read the supporting excerpt";
+            const reference = document.createElement("p");
+            reference.className = "learning-review-reference";
+            reference.textContent = sourceReference;
+            const quote = document.createElement("blockquote");
+            appendRichText(quote, sourceExcerpt, learningReview.keyTerms);
+            source.append(summary, reference, quote);
+            card.append(source);
+        }
+
+        const check = learningReview.quickCheck;
+        if (check?.options?.length === 2) {
+            const quick = document.createElement("section");
+            quick.className = "learning-quick-check";
+            const title = document.createElement("h4");
+            title.textContent = "Quick check";
+            const prompt = document.createElement("p");
+            appendRichText(prompt, check.prompt, learningReview.keyTerms);
+            const optionHost = document.createElement("div");
+            optionHost.className = "learning-check-options";
+            const feedback = document.createElement("p");
+            feedback.className = "learning-check-feedback";
+            feedback.setAttribute("aria-live", "polite");
+
+            check.options.forEach((option) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "learning-check-option";
+                appendRichText(button, option.text, learningReview.keyTerms);
+                button.addEventListener("click", () => {
+                    optionHost.querySelectorAll<HTMLButtonElement>("button").forEach((item) => {
+                        item.disabled = true;
+                    });
+                    button.dataset.result = option.correct ? "correct" : "incorrect";
+                    feedback.textContent = option.feedback;
+                }, { once: true });
+                optionHost.append(button);
+            });
+
+            quick.append(title, prompt, optionHost, feedback);
+            card.append(quick);
+        }
+
+        if (learningReview.keyTerms.length) {
+            const note = document.createElement("p");
+            note.className = "initialism-note";
+            note.textContent = "Tip: hover, tap, or keyboard-focus underlined initialisms for a definition.";
+            card.append(note);
+        }
+    };
+
+    const appendLearningReview = async (
+        question: (typeof questions)[number],
+        selectedAnswer: string,
+        container: HTMLElement,
+        autoLoad: boolean,
+    ) => {
+        const draft = getDraft(question.id);
+        const correctAnswer = question.answers.find((item) => item.correct)?.text;
+        if (!draft?.sourceEvidence?.excerpt || !correctAnswer) return;
+
+        const wrapper = document.createElement("section");
+        wrapper.className = "learning-review-card";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary-button learning-review-button";
+        button.textContent = autoLoad ? "Loading concept review…" : "Review this concept";
+        const card = document.createElement("div");
+        card.className = "learning-review-content";
+        card.hidden = !autoLoad;
+        wrapper.append(button, card);
+        container.append(wrapper);
+
+        let loading = false;
+        const load = async () => {
+            if (loading) return;
+            const cached = learningReviewCache.get(question.id);
+            if (cached) {
+                card.hidden = false;
+                button.hidden = true;
+                renderLearningReview(
+                    card,
+                    cached,
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    draft.sourceEvidence.excerpt,
+                );
+                return;
+            }
+
+            if (!isLearningReviewConfigured()) {
+                card.hidden = false;
+                button.hidden = true;
+                const heading = document.createElement("h3");
+                heading.textContent = `Review: ${getConceptLabel(question)}`;
+                const explanation = document.createElement("p");
+                explanation.textContent = question.explanation || "Review the source excerpt before continuing.";
+                const quote = document.createElement("blockquote");
+                quote.textContent = draft.sourceEvidence.excerpt;
+                card.replaceChildren(heading, explanation, quote);
+                return;
+            }
+
+            loading = true;
+            button.disabled = true;
+            button.textContent = "Loading concept review…";
+            card.hidden = false;
+            card.textContent = "Building a short source-grounded review…";
+
+            try {
+                const learningReview = await generateLearningReview({
+                    prompt: question.prompt,
+                    correctAnswer,
+                    selectedAnswer,
+                    explanation: question.explanation,
+                    sourceReference: `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    sourceExcerpt: draft.sourceEvidence.excerpt,
+                    conceptLabel: getConceptLabel(question),
+                });
+                learningReviewCache.set(question.id, learningReview);
+                button.hidden = true;
+                renderLearningReview(
+                    card,
+                    learningReview,
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    draft.sourceEvidence.excerpt,
+                );
+            } catch (error) {
+                button.disabled = false;
+                button.textContent = "Retry concept review";
+                card.textContent = error instanceof Error
+                    ? `Could not build the enhanced review: ${error.message}`
+                    : "Could not build the enhanced review.";
+            } finally {
+                loading = false;
+            }
+        };
+
+        button.addEventListener("click", load);
+        if (autoLoad) await load();
+    };
+
     const renderQuestion = () => {
         if (!host) return;
         answered = false;
@@ -262,7 +508,7 @@ import Layout from "../../layouts/Layout.astro";
             label.append(input, text);
             answerList.append(label);
 
-            input.addEventListener("change", () => {
+            input.addEventListener("change", async () => {
                 if (answered) return;
                 answered = true;
                 const correct = answer.correct;
@@ -292,6 +538,8 @@ import Layout from "../../layouts/Layout.astro";
                     explanation.textContent = explanationText;
                     review.append(explanation);
                 }
+
+                await appendLearningReview(question, answer.text, review, !correct);
                 appendSourceAndFeedback(question, review);
                 review.hidden = false;
 
