@@ -3,29 +3,203 @@ import Layout from "../../layouts/Layout.astro";
 ---
 
 <Layout title="Learn | Aaron Holmes">
-	<main class="container">
-		<h1>Learn</h1>
-		<p>
-			<a href="/practice">Practice questions across all topics →</a>
-			<a href="/progress">View progress →</a>
-		</p>
-		<div class="lesson-grid">
-			<a class="lesson-card" href="/learn/automation-basics">
-				<h2>Automation Basics</h2>
-				<p>
-					Learn what automation is, how workflows work, and where
-					automation can save time.
-				</p>
-				<span>Start lesson →</span>
-			</a>
-			<a class="lesson-card" href="/learn/api-basics">
-				<h2>API Basics</h2>
-				<p>
-					Learn what APIs are, how requests and responses work, and
-					why they matter in automation.
-				</p>
-				<span>Start lesson →</span>
-			</a>
-		</div>
-	</main>
+    <main class="container learn-shell">
+        <div class="practice-links"><a href="/import">Import curriculum</a><a href="/practice">Practice</a><a href="/progress">Progress</a></div>
+        <h1>Learn</h1>
+        <section id="learn-intro" class="progress-summary"><p>Loading your saved curriculum…</p></section>
+        <nav id="concept-nav" class="concept-nav" aria-label="Curriculum topics"></nav>
+        <div id="lesson-host" class="curriculum-lessons"></div>
+    </main>
 </Layout>
+
+<script>
+    import { readImportedCurriculum } from "../../data/curriculum/storage";
+
+    type SourceSection = { heading: string; text: string };
+    type Initialism = { term: string; expansion: string };
+
+    const intro = document.querySelector<HTMLElement>("#learn-intro");
+    const nav = document.querySelector<HTMLElement>("#concept-nav");
+    const host = document.querySelector<HTMLElement>("#lesson-host");
+    const stored = readImportedCurriculum();
+    let activeUtterance: SpeechSynthesisUtterance | null = null;
+    let activeSentence: HTMLElement | null = null;
+    let activeButton: HTMLButtonElement | null = null;
+
+    const cleanText = (value: string) => value
+        .replace(/^\s*[-*+]\s+/gm, "")
+        .replace(/^\s*\d+[.)]\s+/gm, "")
+        .replace(/^\s*\|/gm, "")
+        .replace(/\|\s*$/gm, "")
+        .replace(/\s*\|\s*/g, ". ")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/__([^_]+)__/g, "$1")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/^\s*[-:| ]{3,}\s*$/gm, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    const splitSections = (text: string, fallbackTitle: string): SourceSection[] => {
+        const sections: SourceSection[] = [];
+        let heading = fallbackTitle;
+        let body: string[] = [];
+        const flush = () => {
+            const sectionText = cleanText(body.join("\n"));
+            if (sectionText) sections.push({ heading, text: sectionText });
+            body = [];
+        };
+        text.replace(/\r\n/g, "\n").split("\n").forEach((line) => {
+            const match = line.match(/^#{1,6}\s+(.+?)\s*$/);
+            if (match) { flush(); heading = cleanText(match[1]); } else body.push(line);
+        });
+        flush();
+        return sections;
+    };
+
+    const extractInitialisms = (text: string): Initialism[] => {
+        const found = new Map<string, string>();
+        const patterns = [
+            /\b([A-Z][A-Za-z]*(?:[ -][A-Z][A-Za-z]*){1,8})\s*\(([A-Z][A-Z0-9-]{1,9})\)/g,
+            /\b([A-Z][A-Z0-9-]{1,9})\s*\(([A-Z][A-Za-z]*(?:[ -][A-Za-z]+){1,8})\)/g,
+        ];
+        for (const pattern of patterns) {
+            for (const match of text.matchAll(pattern)) {
+                const firstIsInitialism = /^[A-Z0-9-]{2,10}$/.test(match[1]);
+                const term = firstIsInitialism ? match[1] : match[2];
+                const expansion = firstIsInitialism ? match[2] : match[1];
+                if (!found.has(term)) found.set(term, expansion);
+            }
+        }
+        return [...found].map(([term, expansion]) => ({ term, expansion }));
+    };
+
+    const sentences = (text: string): string[] => {
+        const normalized = text.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
+        if (!normalized) return [];
+        if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+            const SegmenterCtor = (Intl as any).Segmenter;
+            const segmenter = new SegmenterCtor(undefined, { granularity: "sentence" });
+            return [...segmenter.segment(normalized)].map((item: any) => item.segment.trim()).filter(Boolean);
+        }
+        return normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((item) => item.trim()).filter(Boolean) ?? [normalized];
+    };
+
+    const appendInitialisms = (parent: HTMLElement, text: string, terms: Initialism[]) => {
+        const usable = terms.filter((term) => text.includes(term.term)).sort((a, b) => b.term.length - a.term.length);
+        if (!usable.length) { parent.textContent = text; return; }
+        const escaped = usable.map((term) => term.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "g");
+        const lookup = new Map(usable.map((term) => [term.term, term.expansion]));
+        let cursor = 0;
+        for (const match of text.matchAll(pattern)) {
+            const index = match.index ?? 0;
+            if (index > cursor) parent.append(document.createTextNode(text.slice(cursor, index)));
+            const abbr = document.createElement("abbr");
+            abbr.className = "initialism-help"; abbr.tabIndex = 0; abbr.textContent = match[0];
+            const expansion = lookup.get(match[0]) ?? "";
+            abbr.title = expansion; abbr.dataset.tooltip = expansion; abbr.setAttribute("aria-label", `${match[0]}: ${expansion}`);
+            parent.append(abbr); cursor = index + match[0].length;
+        }
+        if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+    };
+
+    const speechText = (text: string, terms: Initialism[]) => {
+        let output = text;
+        for (const term of terms) {
+            const spoken = /^[A-Z0-9-]{2,8}$/.test(term.term) ? term.term.replace(/-/g, " ").split("").join(" ") : term.term;
+            output = output.replace(new RegExp(`\\b${term.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), spoken);
+        }
+        return output;
+    };
+
+    const stopSpeech = () => {
+        window.speechSynthesis?.cancel();
+        activeSentence?.classList.remove("is-reading");
+        if (activeButton) activeButton.textContent = "Listen";
+        activeSentence = null; activeButton = null; activeUtterance = null;
+    };
+
+    const speakLesson = (button: HTMLButtonElement, sentenceNodes: HTMLElement[], terms: Initialism[]) => {
+        if (!("speechSynthesis" in window)) { button.disabled = true; button.textContent = "Audio unavailable"; return; }
+        if (activeButton === button) { stopSpeech(); return; }
+        stopSpeech(); activeButton = button; button.textContent = "Stop";
+        let index = 0;
+        const speakNext = () => {
+            activeSentence?.classList.remove("is-reading");
+            if (index >= sentenceNodes.length) { stopSpeech(); return; }
+            const node = sentenceNodes[index++]; activeSentence = node; node.classList.add("is-reading");
+            node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            const utterance = new SpeechSynthesisUtterance(speechText(node.textContent ?? "", terms));
+            utterance.rate = 0.95;
+            utterance.onend = speakNext;
+            utterance.onerror = stopSpeech;
+            activeUtterance = utterance; window.speechSynthesis.speak(utterance);
+        };
+        speakNext();
+    };
+
+    const renderLesson = (section: SourceSection, index: number, terms: Initialism[]) => {
+        const article = document.createElement("article"); article.className = "curriculum-lesson"; article.id = `topic-${index + 1}`;
+        const header = document.createElement("div"); header.className = "lesson-heading";
+        const heading = document.createElement("h2"); heading.textContent = section.heading;
+        const audio = document.createElement("button"); audio.type = "button"; audio.className = "secondary-button lesson-audio"; audio.textContent = "Listen";
+        header.append(heading, audio);
+        const body = document.createElement("div"); body.className = "lesson-reading";
+        const sentenceNodes: HTMLElement[] = [];
+        sentences(section.text).forEach((sentence) => {
+            const span = document.createElement("span"); span.className = "read-along-sentence";
+            appendInitialisms(span, sentence, terms); body.append(span, document.createTextNode(" ")); sentenceNodes.push(span);
+        });
+        audio.addEventListener("click", () => speakLesson(audio, sentenceNodes, terms));
+        article.append(header, body); return article;
+    };
+
+    window.addEventListener("beforeunload", stopSpeech);
+
+    if (!stored || !intro || !host || !nav) {
+        if (intro) intro.innerHTML = `<h2>No curriculum saved</h2><p>Import source material first, then it will become your Learn content.</p><p><a class="new-session-button" href="/import">Import curriculum</a></p>`;
+    } else {
+        const sourceText = stored.sourceText?.trim() ?? "";
+        let sections = sourceText ? splitSections(sourceText, stored.curriculum.title) : [];
+        if (!sections.length) {
+            sections = stored.curriculum.concepts.map((concept) => ({ heading: concept.label, text: concept.description ?? "" })).filter((section) => section.text.trim());
+        }
+        const evidenceText = stored.curriculum.questionDrafts.map((draft) => draft.sourceEvidence?.excerpt ?? "").join("\n");
+        const terms = extractInitialisms(`${sourceText}\n${evidenceText}`);
+        intro.replaceChildren();
+        const title = document.createElement("h2"); title.textContent = stored.curriculum.title;
+        const summary = document.createElement("p");
+        summary.textContent = `${sections.length} study topic${sections.length === 1 ? "" : "s"}. Listen reads each topic aloud and highlights the sentence being spoken.`;
+        intro.append(title, summary);
+        if (!sourceText) {
+            const warning = document.createElement("p"); warning.className = "learn-source-note";
+            warning.textContent = "This curriculum was saved before full source-text learning was added, so these lessons use the shorter saved concept summaries. Re-import the original source once to unlock the complete lessons.";
+            intro.append(warning);
+        }
+        if (terms.length) {
+            const note = document.createElement("p"); note.className = "initialism-note"; note.textContent = "Dotted initialisms reveal their source-supported expansion on hover, tap, or keyboard focus."; intro.append(note);
+        }
+        sections.forEach((section, index) => {
+            const link = document.createElement("a"); link.href = `#topic-${index + 1}`; link.textContent = section.heading; nav.append(link);
+            host.append(renderLesson(section, index, terms));
+        });
+    }
+</script>
+
+<style>
+    .learn-shell { padding-bottom: 4rem; }
+    .concept-nav { display: flex; gap: .6rem; overflow-x: auto; padding: 1rem 0; margin: .5rem 0 1rem; scrollbar-width: thin; }
+    .concept-nav a { flex: 0 0 auto; padding: .45rem .7rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); text-decoration: none; font-size: .9rem; }
+    .concept-nav a:hover { border-color: var(--accent); }
+    .curriculum-lessons { display: grid; gap: 1rem; max-width: var(--reading-width); }
+    .curriculum-lesson { padding: 1.1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); scroll-margin-top: 1rem; }
+    .lesson-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+    .lesson-heading h2 { margin: 0; font-size: 1.2rem; }
+    .lesson-audio { flex: 0 0 auto; padding: .45rem .7rem; }
+    .lesson-reading { line-height: 1.85; }
+    .read-along-sentence { border-radius: .2rem; transition: background .15s ease, box-shadow .15s ease; }
+    .read-along-sentence.is-reading { background: var(--surface-alt); box-shadow: 0 0 0 .18rem var(--surface-alt); }
+    .learn-source-note { padding: .75rem; border-left: 3px solid var(--accent); background: var(--surface-alt); }
+    @media (max-width: 520px) { .lesson-heading { align-items: flex-start; } .lesson-heading h2 { font-size: 1.1rem; } }
+</style>
