@@ -1,0 +1,261 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout title="Lesson assessment | Aaron Holmes">
+  <main class="container assessment-shell">
+    <div class="practice-links">
+      <a href="/learn/sequence">← Lesson sequence</a>
+      <a href="/progress">View progress</a>
+    </div>
+    <section id="assessment-intro" class="progress-summary"><p>Loading lesson assessment…</p></section>
+    <section id="assessment-question" class="progress-summary"></section>
+    <div id="assessment-actions" class="practice-actions" hidden>
+      <button id="assessment-next" class="new-session-button" type="button">Next question</button>
+    </div>
+    <section id="assessment-complete" class="practice-complete" hidden>
+      <h2>Understanding check complete</h2>
+      <p>Score: <strong id="assessment-score">0</strong> / <strong id="assessment-total">0</strong></p>
+      <div id="mastery-summary"></div>
+      <div id="assessment-recommendation" class="assessment-recommendation"></div>
+      <div class="progress-actions">
+        <a class="secondary-button" href="/learn/sequence">Back to lessons</a>
+        <a class="secondary-button" href="/progress">View progress</a>
+      </div>
+    </section>
+  </main>
+</Layout>
+
+<script>
+  import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
+  import { buildLearnSections } from "../../data/curriculum/learn-content";
+  import { buildLessonGroups, lessonGroupSource } from "../../data/curriculum/lesson-groups";
+  import { getConceptMastery, getTargetConcepts, savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
+
+  const intro = document.querySelector<HTMLElement>("#assessment-intro");
+  const host = document.querySelector<HTMLElement>("#assessment-question");
+  const actions = document.querySelector<HTMLElement>("#assessment-actions");
+  const next = document.querySelector<HTMLButtonElement>("#assessment-next");
+  const complete = document.querySelector<HTMLElement>("#assessment-complete");
+  const finalScore = document.querySelector<HTMLElement>("#assessment-score");
+  const finalTotal = document.querySelector<HTMLElement>("#assessment-total");
+  const masterySummary = document.querySelector<HTMLElement>("#mastery-summary");
+  const recommendation = document.querySelector<HTMLElement>("#assessment-recommendation");
+
+  const stored = readImportedCurriculum();
+  const params = new URLSearchParams(window.location.search);
+  const groupId = params.get("group") ?? "";
+  const sessionId = crypto.randomUUID();
+  const startedAt = new Date().toISOString();
+
+  const shuffle = <T,>(items: T[]) => {
+    const copy = [...items];
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      [copy[index], copy[swap]] = [copy[swap], copy[index]];
+    }
+    return copy;
+  };
+
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const meaningfulTokens = (value: string) => normalize(value).split(/\s+/).filter((token) => token.length > 2 && !["amazon", "with", "from", "using", "your", "into", "about"].includes(token));
+
+  if (!stored || !intro || !host) {
+    if (intro) intro.innerHTML = `<h2>No curriculum saved</h2><p><a href="/import">Import curriculum</a> first.</p>`;
+  } else {
+    const sourceText = stored.sourceText?.trim()
+      || stored.curriculum.concepts.map((concept) => `## ${concept.label}\n${concept.description ?? ""}`).join("\n\n");
+    const sections = buildLearnSections(stored.curriculum, sourceText);
+    const groups = buildLessonGroups(sections);
+    const group = groups.find((item) => item.id === groupId);
+
+    if (!group) {
+      intro.innerHTML = `<h2>Lesson not found</h2><p>Return to the <a href="/learn/sequence">lesson sequence</a> and choose a generated lesson.</p>`;
+    } else {
+      const groupText = `${group.title}\n${lessonGroupSource(group)}`;
+      const directConceptIds = new Set(group.sections.map((section) => section.conceptId).filter((value): value is string => Boolean(value)));
+      const conceptIds = new Set(directConceptIds);
+
+      stored.curriculum.concepts.forEach((concept) => {
+        const tokens = meaningfulTokens(concept.label);
+        if (tokens.length && tokens.every((token) => normalize(groupText).includes(token))) conceptIds.add(concept.id);
+      });
+
+      const allQuestions = readImportedQuestions();
+      const relevant = allQuestions.filter((question) => {
+        if (question.masteryConcept && conceptIds.has(question.masteryConcept)) return true;
+        if (question.concepts?.some((concept) => conceptIds.has(concept))) return true;
+        const topicTokens = meaningfulTokens(question.topic ?? "");
+        return topicTokens.length >= 2 && topicTokens.every((token) => normalize(groupText).includes(token));
+      });
+
+      const questions = shuffle(relevant).slice(0, 5).map((question) => ({
+        ...question,
+        answers: question.shuffleAnswers === false ? question.answers : shuffle(question.answers),
+      }));
+
+      intro.innerHTML = `<h1>${group.title}</h1><p>This is a short mastery check using existing assessment-quality questions tied to the material you just studied. These answers count toward mastery.</p>`;
+
+      if (!questions.length) {
+        host.innerHTML = `<h2>No matching assessment questions yet</h2><p>The lesson is available, but the current question bank does not contain a validated question that can be linked confidently to this lesson. That is better than inventing a mastery signal.</p>`;
+      } else {
+        let current = 0;
+        let score = 0;
+        let answered = false;
+
+        const conceptLabel = (conceptId?: string) => stored.curriculum.concepts.find((concept) => concept.id === conceptId)?.label ?? conceptId ?? "Concept";
+
+        const finish = () => {
+          host.replaceChildren();
+          if (actions) actions.hidden = true;
+          if (complete) complete.hidden = false;
+          if (finalScore) finalScore.textContent = String(score);
+          if (finalTotal) finalTotal.textContent = String(questions.length);
+
+          saveSessionSummary({
+            id: sessionId,
+            mode: `Lesson assessment · ${group.title}`,
+            requestedLength: String(questions.length),
+            startedAt,
+            completedAt: new Date().toISOString(),
+            questionCount: questions.length,
+            answeredCount: questions.length,
+            correctCount: score,
+            curriculumId: stored.curriculum.id,
+            curriculumTitle: stored.curriculum.title,
+          });
+
+          const assessedIds = new Set<string>();
+          questions.forEach((question) => {
+            if (question.masteryConcept) assessedIds.add(question.masteryConcept);
+            question.concepts?.forEach((concept) => assessedIds.add(concept));
+          });
+          const mastery = getConceptMastery().filter((item) => assessedIds.has(item.concept));
+          if (masterySummary) {
+            const heading = document.createElement("h3");
+            heading.textContent = "Mastery after this check";
+            const list = document.createElement("ul");
+            mastery.forEach((item) => {
+              const li = document.createElement("li");
+              li.textContent = `${conceptLabel(item.concept)}: ${item.status} · ${Math.round(item.masteryScore * 100)}% weighted mastery from ${item.attempts} attempt${item.attempts === 1 ? "" : "s"}`;
+              list.append(li);
+            });
+            masterySummary.replaceChildren(heading, list);
+          }
+
+          const targets = getTargetConcepts().filter((item) => stored.curriculum.concepts.some((concept) => concept.id === item.concept));
+          let recommendedIndex = groups.findIndex((item) => item.id === group.id) + 1;
+          const target = targets[0];
+          if (target) {
+            const matchingIndex = groups.findIndex((candidate) => candidate.sections.some((section) => section.conceptId === target.concept));
+            if (matchingIndex >= 0) recommendedIndex = matchingIndex;
+          }
+          recommendedIndex = Math.min(Math.max(0, recommendedIndex), groups.length - 1);
+          const recommended = groups[recommendedIndex];
+          if (recommendation && recommended) {
+            const heading = document.createElement("h3");
+            heading.textContent = "Recommended next";
+            const body = document.createElement("p");
+            if (target) body.textContent = `${conceptLabel(target.concept)} currently needs the most attention. Continue with ${recommended.title}.`;
+            else body.textContent = `Continue with ${recommended.title}.`;
+            const back = document.createElement("a");
+            back.className = "new-session-button";
+            back.href = "/learn/sequence";
+            back.textContent = "Return to recommended lessons";
+            recommendation.replaceChildren(heading, body, back);
+          }
+        };
+
+        const renderQuestion = () => {
+          answered = false;
+          if (actions) actions.hidden = true;
+          const question = questions[current];
+          const meta = document.createElement("p");
+          meta.className = "assessment-meta";
+          meta.textContent = `Question ${current + 1} of ${questions.length} · Score ${score}/${current}`;
+          const heading = document.createElement("h2");
+          heading.textContent = question.prompt;
+          const answerList = document.createElement("div");
+          answerList.className = "answers";
+          const review = document.createElement("div");
+          review.className = "review";
+          review.hidden = true;
+
+          question.answers.forEach((answer) => {
+            const label = document.createElement("label");
+            label.className = "answer-option";
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = `lesson-assessment-${question.id}`;
+            input.value = answer.id;
+            const text = document.createElement("span");
+            text.textContent = answer.text;
+            label.append(input, text);
+            answerList.append(label);
+
+            input.addEventListener("change", () => {
+              if (answered) return;
+              answered = true;
+              if (answer.correct) score += 1;
+              label.dataset.result = answer.correct ? "correct" : "incorrect";
+              const correctAnswer = question.answers.find((item) => item.correct);
+              answerList.querySelectorAll<HTMLInputElement>("input").forEach((item) => {
+                item.disabled = true;
+                if (!answer.correct && correctAnswer && item.value === correctAnswer.id) item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct");
+              });
+              const result = document.createElement("p");
+              result.textContent = answer.correct ? "Correct." : "Not quite.";
+              review.replaceChildren(result);
+              if (!answer.correct && correctAnswer) {
+                const correction = document.createElement("p");
+                correction.innerHTML = `<strong>Correct answer:</strong> ${correctAnswer.text}`;
+                review.append(correction);
+              }
+              if (question.explanation || answer.feedback) {
+                const explanation = document.createElement("p");
+                explanation.textContent = question.explanation || answer.feedback;
+                review.append(explanation);
+              }
+              review.hidden = false;
+
+              savePracticeAttempt({
+                questionId: question.id,
+                answerId: answer.id,
+                correct: answer.correct,
+                answeredAt: new Date().toISOString(),
+                sessionId,
+                curriculumId: stored.curriculum.id,
+                curriculumTitle: stored.curriculum.title,
+                ...(question.topic && { topic: question.topic }),
+                ...(question.concepts?.length && { concepts: question.concepts }),
+                ...(question.masteryConcept && { masteryConcept: question.masteryConcept }),
+                ...(question.difficulty && { difficulty: question.difficulty }),
+                ...(question.learningStage && { learningStage: question.learningStage }),
+              });
+
+              if (actions) actions.hidden = false;
+              if (next) next.textContent = current === questions.length - 1 ? "See mastery update" : "Next question";
+            });
+          });
+
+          host.replaceChildren(meta, heading, answerList, review);
+        };
+
+        next?.addEventListener("click", () => {
+          if (!answered) return;
+          if (current === questions.length - 1) finish();
+          else {
+            current += 1;
+            renderQuestion();
+          }
+        });
+
+        renderQuestion();
+      }
+    }
+  }
+</script>
+
+<style>
+.assessment-shell{padding-bottom:4rem}.assessment-shell .progress-summary{max-width:var(--reading-width)}.assessment-meta{color:var(--text-muted)}.assessment-recommendation{margin:1.25rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface-alt)}.assessment-recommendation .new-session-button{display:inline-block;margin-top:.5rem}.answer-option{display:flex;gap:.75rem;align-items:flex-start;padding:.85rem;margin:.65rem 0;border:1px solid var(--border);border-radius:.65rem}.answer-option[data-result="correct"]{border-color:var(--success,#5fa46a)}.answer-option[data-result="incorrect"]{border-color:var(--danger,#b85c5c)}.review{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+</style>
