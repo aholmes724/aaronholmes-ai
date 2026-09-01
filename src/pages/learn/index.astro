@@ -151,7 +151,10 @@ import Layout from "../../layouts/Layout.astro";
         const heading = document.createElement("h2"); appendInitialisms(heading, section.title, terms);
         const badge = document.createElement("span"); badge.className = `readiness-badge readiness-${section.decision.readiness}`; badge.textContent = readinessLabels[section.decision.readiness];
         const why = document.createElement("details"); why.className = "readiness-detail";
-        why.innerHTML = `<summary>Why this classification?</summary><p>${section.decision.reason}</p><p>${section.decision.signals.join(" · ")} · confidence: ${section.decision.confidence}</p>`;
+        const whySummary = document.createElement("summary"); whySummary.textContent = "Why this classification?";
+        const reason = document.createElement("p"); reason.textContent = section.decision.reason;
+        const signals = document.createElement("p"); signals.textContent = `${section.decision.signals.join(" · ")} · confidence: ${section.decision.confidence}`;
+        why.append(whySummary, reason, signals);
         const source = document.createElement("details"); source.className = "source-detail";
         const sourceSummary = document.createElement("summary"); sourceSummary.textContent = "View source section";
         const sourceBody = document.createElement("p"); sourceBody.textContent = cleanText(section.sourceText);
@@ -187,13 +190,14 @@ import Layout from "../../layouts/Layout.astro";
         });
 
         const distinctions = document.createElement("section"); distinctions.className = "lesson-block";
-        distinctions.innerHTML = "<h3>Distinctions that matter</h3>";
+        const distinctionsHeading = document.createElement("h3"); distinctionsHeading.textContent = "Distinctions that matter"; distinctions.append(distinctionsHeading);
         const list = document.createElement("ul");
         lesson.distinctions.forEach((item) => { const li = document.createElement("li"); appendInitialisms(li, item, terms); list.append(li); spokenNodes.push(li); });
         distinctions.append(list); article.append(distinctions);
 
         if (lesson.keyTerms.length) {
-            const termsSection = document.createElement("section"); termsSection.className = "lesson-block"; termsSection.innerHTML = "<h3>Key terms</h3>";
+            const termsSection = document.createElement("section"); termsSection.className = "lesson-block";
+            const termsHeading = document.createElement("h3"); termsHeading.textContent = "Key terms"; termsSection.append(termsHeading);
             const chips = document.createElement("div"); chips.className = "term-chips";
             lesson.keyTerms.forEach((term) => {
                 const chip = document.createElement("abbr"); chip.className = "initialism-help learn-initialism term-chip"; chip.tabIndex = 0; chip.textContent = term.term;
@@ -203,7 +207,9 @@ import Layout from "../../layouts/Layout.astro";
             termsSection.append(chips); article.append(termsSection);
         }
 
-        const remember = document.createElement("section"); remember.className = "memory-hook"; remember.innerHTML = `<strong>Remember:</strong> ${lesson.memoryHook}`; article.append(remember);
+        const remember = document.createElement("section"); remember.className = "memory-hook";
+        const rememberLabel = document.createElement("strong"); rememberLabel.textContent = "Remember: ";
+        remember.append(rememberLabel, document.createTextNode(lesson.memoryHook)); article.append(remember);
 
         const check = document.createElement("section"); check.className = "quick-check";
         const checkTitle = document.createElement("h3"); checkTitle.textContent = "Quick check";
