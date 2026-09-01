@@ -21,8 +21,11 @@ import Layout from "../../layouts/Layout.astro";
     <div id="group-list" class="group-list"></div>
     <section id="queue-actions" class="queue-actions" hidden>
       <p id="queue-summary"></p>
+      <div id="history-buttons" class="queue-buttons history-buttons">
+        <button id="previous-generated" class="secondary-button" type="button" hidden>← Previous generated</button>
+        <button id="next-generated" class="secondary-button" type="button" hidden>Next generated →</button>
+      </div>
       <div class="queue-buttons">
-        <button id="previous-lesson" class="secondary-button" type="button" hidden>← Previous lesson</button>
         <button id="generate-next" class="new-session-button" type="button">Generate next lesson →</button>
         <button id="generate-next-three" class="secondary-button" type="button">Generate next 3 lessons</button>
       </div>
@@ -46,7 +49,8 @@ import Layout from "../../layouts/Layout.astro";
   const list = document.querySelector<HTMLElement>("#group-list");
   const queueActions = document.querySelector<HTMLElement>("#queue-actions");
   const queueSummary = document.querySelector<HTMLElement>("#queue-summary");
-  const previousButton = document.querySelector<HTMLButtonElement>("#previous-lesson");
+  const previousGeneratedButton = document.querySelector<HTMLButtonElement>("#previous-generated");
+  const nextGeneratedButton = document.querySelector<HTMLButtonElement>("#next-generated");
   const nextButton = document.querySelector<HTMLButtonElement>("#generate-next");
   const nextThreeButton = document.querySelector<HTMLButtonElement>("#generate-next-three");
   const progress = document.querySelector<HTMLElement>("#generation-progress");
@@ -98,6 +102,7 @@ import Layout from "../../layouts/Layout.astro";
     const redraw = () => {
       list.replaceChildren(); const count = generatedCount();
       if (count > 0) {
+        visibleStart = Math.min(visibleStart, Math.max(0, count - 1));
         const end = Math.min(visibleStart + visibleAmount, count);
         for (let index = visibleStart; index < end; index += 1) { const lesson = getCachedLesson(groups[index]); if (lesson) list.append(renderLesson(groups[index], lesson, index)); }
       }
@@ -105,33 +110,48 @@ import Layout from "../../layouts/Layout.astro";
       if (queueActions && queueSummary) {
         const remaining = groups.length - count; queueActions.hidden = count === 0;
         const visibleEnd = Math.min(visibleStart + visibleAmount, count);
-        queueSummary.textContent = remaining > 0 ? `Showing lessons ${visibleStart + 1}–${visibleEnd}. ${count} of ${groups.length} generated; ${remaining} remaining.` : `Showing lessons ${visibleStart + 1}–${visibleEnd}. All ${groups.length} lessons generated.`;
-        if (nextButton) nextButton.hidden = remaining === 0; if (nextThreeButton) nextThreeButton.hidden = remaining === 0;
-        if (previousButton) previousButton.hidden = visibleStart === 0;
+        const rangeLabel = visibleAmount === 1 || visibleEnd === visibleStart + 1 ? `lesson ${visibleStart + 1}` : `lessons ${visibleStart + 1}–${visibleEnd}`;
+        queueSummary.textContent = remaining > 0 ? `Showing ${rangeLabel}. ${count} of ${groups.length} generated; ${remaining} remaining.` : `Showing ${rangeLabel}. All ${groups.length} lessons generated.`;
+        if (previousGeneratedButton) previousGeneratedButton.hidden = visibleStart === 0;
+        if (nextGeneratedButton) nextGeneratedButton.hidden = visibleEnd >= count;
+        if (nextButton) nextButton.hidden = remaining === 0;
+        if (nextThreeButton) nextThreeButton.hidden = remaining === 0;
       }
       if (nextThreeButton) nextThreeButton.textContent = `Generate next ${Math.min(3, Math.max(0, groups.length - count))} lessons`;
+    };
+
+    const moveGeneratedPage = (direction: -1 | 1) => {
+      const count = generatedCount(); if (!count) return;
+      const step = Math.max(1, visibleAmount);
+      if (direction < 0) visibleStart = Math.max(0, visibleStart - step);
+      else visibleStart = Math.min(Math.max(0, count - 1), visibleStart + step);
+      if (progress) progress.hidden = true;
+      redraw(); goTop();
     };
 
     const generateRange = async (amount: number) => {
       if (!isLessonGenerationConfigured()) { if (status) status.textContent = "Lesson generation is not configured."; return; }
       const start = generatedCount(); const targets = groups.slice(start, start + amount); if (!targets.length) return;
       list.replaceChildren(); visibleStart = start; visibleAmount = targets.length; goTop();
-      [generateButton, clearButton, previousButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = true; });
+      [generateButton, clearButton, previousGeneratedButton, nextGeneratedButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = true; });
       if (progress) progress.hidden = false; if (status) status.textContent = "";
       try {
         for (let offset = 0; offset < targets.length; offset += 1) {
           const group = targets[offset]; const lessonNumber = start + offset + 1;
-          if (progressLabel) progressLabel.textContent = `Generating lesson ${lessonNumber}: ${group.title}`; if (progressCount) progressCount.textContent = `${offset + 1} / ${targets.length}`; if (progressBar) progressBar.style.width = `${Math.round((offset / targets.length) * 100)}%`; if (progressDetail) progressDetail.textContent = "Please keep this tab open. Earlier lessons remain saved and can be reopened with Previous lesson.";
+          if (progressLabel) progressLabel.textContent = `Generating lesson ${lessonNumber}: ${group.title}`; if (progressCount) progressCount.textContent = `${offset + 1} / ${targets.length}`; if (progressBar) progressBar.style.width = `${Math.round((offset / targets.length) * 100)}%`; if (progressDetail) progressDetail.textContent = "Please keep this tab open. Earlier lessons remain saved and can be reopened with the generated-content navigation below.";
           const lesson = await generateLesson({ curriculumTitle: stored.curriculum.title, sectionTitle: group.title, sourceText: lessonGroupSource(group), objectivesText: sections.filter((section) => section.role.role === "objectives").map((section) => section.sourceText).join("\n\n"), neighboringContext: "" });
           sessionStorage.setItem(cacheKey(stored.curriculum.id, group.id), JSON.stringify(lesson)); redraw();
         }
         if (progressLabel) progressLabel.textContent = "Generation complete"; if (progressBar) progressBar.style.width = "100%"; if (progressDetail) progressDetail.textContent = "The newly generated lesson content is shown below."; if (status) status.textContent = `${generatedCount()} of ${groups.length} lessons generated.`; goTop();
       } catch (error) { if (progressLabel) progressLabel.textContent = "Generation stopped"; if (status) status.textContent = error instanceof Error ? error.message : "Lesson generation failed."; }
-      finally { [generateButton, clearButton, previousButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = false; }); redraw(); }
+      finally { [generateButton, clearButton, previousGeneratedButton, nextGeneratedButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = false; }); redraw(); }
     };
 
-    generateButton?.addEventListener("click", () => generateRange(3)); nextButton?.addEventListener("click", () => generateRange(1)); nextThreeButton?.addEventListener("click", () => generateRange(3));
-    previousButton?.addEventListener("click", () => { if (visibleStart <= 0) return; visibleStart = Math.max(0, visibleStart - 1); visibleAmount = 1; if (progress) progress.hidden = true; redraw(); goTop(); });
+    generateButton?.addEventListener("click", () => generateRange(3));
+    nextButton?.addEventListener("click", () => generateRange(1));
+    nextThreeButton?.addEventListener("click", () => generateRange(3));
+    previousGeneratedButton?.addEventListener("click", () => moveGeneratedPage(-1));
+    nextGeneratedButton?.addEventListener("click", () => moveGeneratedPage(1));
     exportSequenceButton?.addEventListener("click", () => { const parts = [`# ${stored.curriculum.title} — Learn sequence`, ""]; groups.slice(0, generatedCount()).forEach((group,index)=>{const lesson=getCachedLesson(group);if(lesson)parts.push(lessonMarkdown(group,lesson,index),"","---","");}); downloadText(`${slugify(stored.curriculum.title)}-learn-sequence.md`, parts.join("\n")); });
     clearButton?.addEventListener("click", () => { groups.forEach((group) => sessionStorage.removeItem(cacheKey(stored.curriculum.id, group.id))); visibleStart = 0; visibleAmount = Math.min(3, groups.length); if (status) status.textContent = "Generated sequence cleared."; if (progress) progress.hidden = true; redraw(); goTop(); });
     redraw();
@@ -139,5 +159,5 @@ import Layout from "../../layouts/Layout.astro";
 </script>
 
 <style>
-.sequence-shell{padding-bottom:4rem}.sequence-actions,.queue-buttons{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0}.sequence-status{color:var(--text-muted)}.generation-progress,.queue-actions{max-width:var(--reading-width);margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface-alt)}.generation-progress-heading{display:flex;justify-content:space-between;gap:1rem}.generation-progress-track{height:.6rem;margin:.75rem 0;border-radius:999px;overflow:hidden;background:var(--border)}.generation-progress-track span{display:block;width:0;height:100%;background:var(--accent);transition:width .25s}.group-list{display:grid;gap:1rem;max-width:var(--reading-width)}.sequence-card{padding:1.1rem;border:1px solid var(--border);border-radius:.8rem;background:var(--surface)}.sequence-card-heading{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.sequence-card h2{margin:.2rem 0 .55rem}.sequence-card h3{margin:1rem 0 .35rem;font-size:1rem}.sequence-card details{margin-top:1rem}.sequence-card details summary{cursor:pointer;font-weight:650}.sequence-card details p{line-height:1.65}.group-source-count{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.88rem}.lesson-eyebrow{margin:0;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}.learning-goal{color:var(--text-muted)}.compact-button{padding:.45rem .65rem;font-size:.85rem}@media(max-width:620px){.sequence-card-heading{display:grid}.queue-buttons button{width:100%;text-align:left}}
+.sequence-shell{padding-bottom:4rem}.sequence-actions,.queue-buttons{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0}.history-buttons{padding-bottom:.85rem;margin-bottom:.85rem;border-bottom:1px solid var(--border)}.sequence-status{color:var(--text-muted)}.generation-progress,.queue-actions{max-width:var(--reading-width);margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface-alt)}.generation-progress-heading{display:flex;justify-content:space-between;gap:1rem}.generation-progress-track{height:.6rem;margin:.75rem 0;border-radius:999px;overflow:hidden;background:var(--border)}.generation-progress-track span{display:block;width:0;height:100%;background:var(--accent);transition:width .25s}.group-list{display:grid;gap:1rem;max-width:var(--reading-width)}.sequence-card{padding:1.1rem;border:1px solid var(--border);border-radius:.8rem;background:var(--surface)}.sequence-card-heading{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.sequence-card h2{margin:.2rem 0 .55rem}.sequence-card h3{margin:1rem 0 .35rem;font-size:1rem}.sequence-card details{margin-top:1rem}.sequence-card details summary{cursor:pointer;font-weight:650}.sequence-card details p{line-height:1.65}.group-source-count{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.88rem}.lesson-eyebrow{margin:0;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}.learning-goal{color:var(--text-muted)}.compact-button{padding:.45rem .65rem;font-size:.85rem}@media(max-width:620px){.sequence-card-heading{display:grid}.queue-buttons button{width:100%;text-align:left}}
 </style>
