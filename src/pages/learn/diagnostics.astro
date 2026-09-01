@@ -1,0 +1,80 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout title="Learn diagnostics | Aaron Holmes">
+  <main class="container diagnostics-shell">
+    <div class="practice-links"><a href="/learn">← Learn</a><a href="/learn/sequence">Lesson sequence</a><a href="/import">New curriculum</a></div>
+    <h1>Learn diagnostics</h1>
+    <section id="diagnostics-summary" class="progress-summary"><p>Loading source diagnostics…</p></section>
+    <div id="diagnostics-list" class="diagnostics-list"></div>
+  </main>
+</Layout>
+
+<script>
+  import { readImportedCurriculum } from "../../data/curriculum/storage";
+  import { buildLearnSections } from "../../data/curriculum/learn-content";
+
+  const summary = document.querySelector<HTMLElement>("#diagnostics-summary");
+  const list = document.querySelector<HTMLElement>("#diagnostics-list");
+  const stored = readImportedCurriculum();
+
+  if (!summary || !list) {
+    // Page shell unavailable.
+  } else if (!stored) {
+    summary.innerHTML = `<h2>No curriculum saved</h2><p><a href="/import">Import curriculum</a> first.</p>`;
+  } else {
+    const sourceText = stored.sourceText?.trim()
+      || stored.curriculum.concepts.map((concept) => `## ${concept.label}\n${concept.description ?? ""}`).join("\n\n");
+    const sections = buildLearnSections(stored.curriculum, sourceText);
+    const learner = sections.filter((section) => section.role.role === "learner-content");
+    const counts = learner.reduce((result, section) => {
+      const key = section.decision?.readiness ?? "unknown";
+      result[key] = (result[key] ?? 0) + 1;
+      return result;
+    }, {} as Record<string, number>);
+
+    const heading = document.createElement("h2");
+    heading.textContent = stored.curriculum.title;
+    const body = document.createElement("p");
+    body.textContent = `${learner.length} learner-facing sections · ${counts.preserve ?? 0} preserve · ${counts.augment ?? 0} augment · ${counts.transform ?? 0} transform · ${counts.insufficient ?? 0} insufficient.`;
+    const sourceNote = document.createElement("p");
+    sourceNote.textContent = stored.sourceText?.trim()
+      ? "Original source text is stored with this curriculum."
+      : "Original full source text is not stored with this older curriculum; classifications are using the saved fallback content.";
+    summary.replaceChildren(heading, body, sourceNote);
+
+    sections.forEach((section, index) => {
+      const card = document.createElement("article");
+      card.className = "diagnostic-card";
+      const title = document.createElement("h2");
+      title.textContent = `${index + 1}. ${section.title.replace(/^\s*\d+[.)]\s*/, "")}`;
+      const meta = document.createElement("p");
+      const readiness = section.decision?.readiness ?? "not applicable";
+      meta.textContent = `${section.role.role} · ${readiness} · role confidence: ${section.role.confidence}${section.decision ? ` · readiness confidence: ${section.decision.confidence}` : ""}`;
+      const roleReason = document.createElement("p");
+      roleReason.textContent = section.role.reason;
+      card.append(title, meta, roleReason);
+      if (section.decision) {
+        const decision = document.createElement("p");
+        decision.textContent = section.decision.reason;
+        const signals = document.createElement("p");
+        signals.className = "diagnostic-signals";
+        signals.textContent = section.decision.signals.join(" · ");
+        card.append(decision, signals);
+      }
+      const source = document.createElement("details");
+      const sourceSummary = document.createElement("summary");
+      sourceSummary.textContent = "View source section";
+      const sourceBody = document.createElement("pre");
+      sourceBody.textContent = section.sourceText;
+      source.append(sourceSummary, sourceBody);
+      card.append(source);
+      list.append(card);
+    });
+  }
+</script>
+
+<style>
+  .diagnostics-shell{padding-bottom:4rem}.diagnostics-shell .progress-summary,.diagnostics-list{max-width:var(--reading-width)}.diagnostics-list{display:grid;gap:1rem}.diagnostic-card{padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface)}.diagnostic-card h2{font-size:1.05rem;margin:.1rem 0 .5rem}.diagnostic-card p{margin:.4rem 0}.diagnostic-signals{color:var(--text-muted);font-size:.9rem}.diagnostic-card summary{cursor:pointer;font-weight:650}.diagnostic-card pre{white-space:pre-wrap;font-family:inherit;line-height:1.55;color:var(--text-muted)}
+</style>
