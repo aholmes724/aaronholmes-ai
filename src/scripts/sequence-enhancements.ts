@@ -132,8 +132,9 @@ if (isSequencePage()) {
     remember.className = "sequence-memory-hook";
     const rememberLabel = document.createElement("strong");
     rememberLabel.textContent = "Remember: ";
-    remember.append(rememberLabel);
-    appendGlossaryText(remember, lesson.memoryHook, lesson.keyTerms);
+    const rememberText = document.createElement("span");
+    appendGlossaryText(rememberText, lesson.memoryHook, lesson.keyTerms);
+    remember.append(rememberLabel, rememberText);
     details.append(remember);
 
     const check = document.createElement("section");
@@ -186,6 +187,7 @@ if (isSequencePage()) {
         if (target.closest(".lesson-glossary-popover")) return;
         if (target.querySelector(".lesson-glossary-term")) return;
         if (target.classList.contains("group-source-count")) return;
+        if (target.classList.contains("quick-check-feedback")) return;
         const text = target.textContent ?? "";
         if (text) appendGlossaryText(target, text, lesson.keyTerms);
       });
