@@ -1,6 +1,7 @@
 import type { CurriculumPackage, CurriculumSourceKind } from "./types";
 
 export type InstructionalReadiness = "preserve" | "augment" | "transform" | "insufficient";
+export type LearnSourceRole = "learner-content" | "objectives" | "metadata";
 
 export interface LearnContentDecision {
     readiness: InstructionalReadiness;
@@ -9,18 +10,66 @@ export interface LearnContentDecision {
     signals: string[];
 }
 
+export interface LearnSourceRoleDecision {
+    role: LearnSourceRole;
+    confidence: "low" | "medium" | "high";
+    reason: string;
+}
+
 export interface LearnSection {
     id: string;
     title: string;
     sourceText: string;
     conceptId?: string;
-    decision: LearnContentDecision;
+    role: LearnSourceRoleDecision;
+    decision?: LearnContentDecision;
 }
 
 const instructionalKinds = new Set<CurriculumSourceKind>(["book", "course"]);
 const referenceKinds = new Set<CurriculumSourceKind>(["documentation", "article"]);
 
 const countMatches = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
+
+export function classifyLearnSourceRole(title: string, text: string): LearnSourceRoleDecision {
+    const combined = `${title}\n${text}`.toLowerCase();
+    const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+    const metadataSignals = [
+        /\bpurpose\s*:/,
+        /\bcoverage basis\s*:/,
+        /\bsource[- ]grounded curriculum package\b/,
+        /\bblind (?:pretest|posttest)\b/,
+        /\bknowledge check questions?\b/,
+        /\bassessment material\b/,
+        /\bthird[- ]party answer material\b/,
+        /\bdeliberately excluded\b/,
+        /\bcuration rule\b/,
+        /\bprovenance\b/,
+        /\bverification tier\b/,
+    ];
+    const metadataHits = metadataSignals.filter((pattern) => pattern.test(combined)).length;
+    if (metadataHits >= 2 || /^(purpose|coverage basis|source notes?|provenance|curation notes?)$/.test(normalizedTitle)) {
+        return {
+            role: "metadata",
+            confidence: "high",
+            reason: "This section describes how the curriculum was assembled or evaluated rather than teaching the learner.",
+        };
+    }
+
+    if (/\b(learning )?objectives?\b/.test(normalizedTitle) || /\ba learner should be able to\b/.test(combined)) {
+        return {
+            role: "objectives",
+            confidence: "high",
+            reason: "This section states learning targets. Keep it as transformation context, but do not present it as a lesson by itself.",
+        };
+    }
+
+    return {
+        role: "learner-content",
+        confidence: "medium",
+        reason: "This section appears to contain subject matter intended to support learning.",
+    };
+}
 
 export function assessInstructionalReadiness(
     text: string,
@@ -115,19 +164,14 @@ export function buildLearnSections(curriculum: CurriculumPackage, sourceText: st
     });
     flush();
 
-    if (!sections.length) {
-        return curriculum.concepts
+    const rawSections = sections.length
+        ? sections
+        : curriculum.concepts
             .filter((concept) => concept.description?.trim())
-            .map((concept, index) => ({
-                id: `learn-${index + 1}`,
-                title: concept.label,
-                sourceText: concept.description ?? "",
-                conceptId: concept.id,
-                decision: assessInstructionalReadiness(concept.description ?? "", sourceKind),
-            }));
-    }
+            .map((concept) => ({ title: concept.label, text: concept.description ?? "" }));
 
-    return sections.map((section, index) => {
+    return rawSections.map((section, index) => {
+        const role = classifyLearnSourceRole(section.title, section.text);
         const concept = curriculum.concepts.find((item) =>
             section.title.toLowerCase().includes(item.label.toLowerCase()) ||
             item.label.toLowerCase().includes(section.title.toLowerCase()),
@@ -137,7 +181,8 @@ export function buildLearnSections(curriculum: CurriculumPackage, sourceText: st
             title: section.title,
             sourceText: section.text,
             conceptId: concept?.id,
-            decision: assessInstructionalReadiness(section.text, sourceKind),
+            role,
+            decision: role.role === "learner-content" ? assessInstructionalReadiness(section.text, sourceKind) : undefined,
         };
     });
 }
