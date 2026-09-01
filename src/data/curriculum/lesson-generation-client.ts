@@ -49,6 +49,34 @@ export function isLessonGenerationConfigured(): boolean {
     return Boolean(supabaseUrl && supabaseKey);
 }
 
+const canonicalizeGlossaryTerms = (lesson: GeneratedLesson): GeneratedLesson => {
+    const keyTerms = lesson.keyTerms.map((entry) => {
+        const inline = entry.term.match(/^(.+?)\s*\(\s*(?:Amazon\s+)?([A-Z][A-Z0-9-]{1,9})\s*\)$/);
+        if (!inline) return entry;
+
+        const longForm = inline[1].trim();
+        const abbreviation = inline[2].trim();
+        return {
+            ...entry,
+            term: abbreviation,
+            expansion: entry.expansion && entry.expansion !== entry.term ? entry.expansion : longForm,
+        };
+    });
+
+    // Keep one canonical teaching entry per term. Prefer the first generated
+    // entry so the model's priority/order remains meaningful.
+    const seen = new Set<string>();
+    return {
+        ...lesson,
+        keyTerms: keyTerms.filter((entry) => {
+            const key = entry.term.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }),
+    };
+};
+
 export async function generateLesson(request: GenerateLessonRequest): Promise<GeneratedLesson> {
     if (!supabaseUrl || !supabaseKey) throw new Error("Lesson generation is not configured.");
 
@@ -66,5 +94,5 @@ export async function generateLesson(request: GenerateLessonRequest): Promise<Ge
     if (!response.ok || !payload?.lesson) {
         throw new Error(payload?.message || `Lesson generation failed with HTTP ${response.status}.`);
     }
-    return payload.lesson;
+    return canonicalizeGlossaryTerms(payload.lesson);
 }
