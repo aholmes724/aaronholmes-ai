@@ -2,6 +2,9 @@ export interface LessonKeyTerm {
     term: string;
     expansion: string;
     definition: string;
+    whyItMatters: string;
+    emphasisTerms: string[];
+    priority: "high" | "medium";
 }
 
 export interface LessonBlock {
