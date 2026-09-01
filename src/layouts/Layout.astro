@@ -26,6 +26,21 @@ const {
     <script is:inline>
       const savedTheme = localStorage.getItem("aaronholmes.theme");
       document.documentElement.dataset.theme = savedTheme || "dark";
+
+      // Generated lessons are durable in localStorage, while the existing Learn
+      // renderers still use sessionStorage as their working cache. Hydrate those
+      // entries before deferred page scripts run so returning to Learn does not
+      // trigger another model call after a tab/browser restart.
+      try {
+        for (let index = 0; index < localStorage.length; index += 1) {
+          const key = localStorage.key(index);
+          if (!key?.startsWith("aaronholmes.lesson-")) continue;
+          const value = localStorage.getItem(key);
+          if (value && !sessionStorage.getItem(key)) sessionStorage.setItem(key, value);
+        }
+      } catch {
+        // Storage may be unavailable in private/restricted browser contexts.
+      }
     </script>
 
     <title>{title}</title>
@@ -58,6 +73,7 @@ const {
   import "../scripts/learn-sequence-link";
   import "../scripts/sequence-enhancements";
   import "../scripts/lesson-assessment-links";
+  import "../scripts/lesson-persistence";
 
   const themeToggle =
     document.querySelector<HTMLButtonElement>("#theme-toggle");
