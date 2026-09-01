@@ -160,8 +160,8 @@ import Layout from "../../layouts/Layout.astro";
             else body.textContent = `Continue with ${recommended.title}.`;
             const back = document.createElement("a");
             back.className = "new-session-button";
-            back.href = "/learn/sequence";
-            back.textContent = "Return to recommended lessons";
+            back.href = `/learn/sequence?focus=${encodeURIComponent(recommended.id)}`;
+            back.textContent = "Open recommended lesson";
             recommendation.replaceChildren(heading, body, back);
           }
         };
