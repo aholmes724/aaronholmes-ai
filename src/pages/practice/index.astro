@@ -4,38 +4,28 @@ import Layout from "../../layouts/Layout.astro";
 
 <Layout title="Practice | Aaron Holmes">
   <main class="container practice-hub">
-    <div class="practice-links">
-      <a href="/learn">← Learn</a>
-      <a href="/progress">Progress</a>
-      <a href="/import">New curriculum</a>
-    </div>
-
+    <div class="practice-links"><a href="/learn">← Learn</a><a href="/progress">Progress</a><a href="/import">New curriculum</a></div>
     <h1>Practice</h1>
-    <section id="practice-setup" class="progress-summary"><p>Loading current curriculum…</p></section>
+    <section id="practice-setup" class="practice-setup"><p>Loading current curriculum…</p></section>
     <section id="practice-session" hidden>
-      <div class="practice-meta">
-        <p id="question-progress"></p>
-        <p>Score: <strong id="practice-score">0</strong> / <strong id="answered-count">0</strong></p>
-      </div>
+      <div class="practice-meta"><p id="question-progress"></p><p>Score: <strong id="practice-score">0</strong> / <strong id="answered-count">0</strong></p></div>
       <section id="practice-question" class="progress-summary"></section>
-      <div id="practice-actions" class="practice-actions" hidden>
-        <button id="next-question" class="new-session-button" type="button">Next question</button>
-      </div>
+      <div id="practice-actions" class="practice-actions" hidden><button id="next-question" class="new-session-button" type="button">Next question</button></div>
     </section>
     <section id="practice-complete" class="practice-complete" hidden>
-      <h2>Practice complete</h2>
-      <p>Score: <strong id="final-score">0</strong> / <strong id="final-total">0</strong></p>
-      <div class="progress-actions">
-        <button id="practice-again" class="new-session-button" type="button">Practice again</button>
-        <a class="secondary-button" href="/learn">Return to Learn</a>
-        <a class="secondary-button" href="/progress">View progress</a>
-      </div>
+      <h2>Practice complete</h2><p>Score: <strong id="final-score">0</strong> / <strong id="final-total">0</strong></p>
+      <div class="progress-actions"><button id="practice-again" class="new-session-button" type="button">Practice again</button><a class="secondary-button" href="/learn">Return to Learn</a><a class="secondary-button" href="/progress">View progress</a></div>
     </section>
   </main>
 </Layout>
 
 <script>
-  import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
+  import { readImportedCurriculum, readImportedQuestions, saveImportedCurriculum } from "../../data/curriculum/storage";
+  import { buildLearnSections } from "../../data/curriculum/learn-content";
+  import { buildLessonGroups, lessonGroupSource } from "../../data/curriculum/lesson-groups";
+  import { buildPracticeTopics, questionMatchesPracticeTopic, topicQuestionCount } from "../../data/curriculum/practice-topics";
+  import { createQuestionGenerationRequest } from "../../data/curriculum/generation-contract";
+  import { generateQuestionDrafts, isQuestionGenerationConfigured } from "../../data/curriculum/generation-client";
   import { getConceptMastery, getTargetConcepts, readPracticeAttempts, savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
 
   const setup = document.querySelector<HTMLElement>("#practice-setup");
@@ -53,155 +43,108 @@ import Layout from "../../layouts/Layout.astro";
   const stored = readImportedCurriculum();
   const allQuestions = readImportedQuestions();
 
-  const shuffle = <T,>(items: T[]) => {
-    const copy = [...items];
-    for (let i = copy.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  };
+  const shuffle = <T,>(items: T[]) => { const copy = [...items]; for (let i = copy.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [copy[i], copy[j]] = [copy[j], copy[i]]; } return copy; };
+  const statusRank: Record<string, number> = { weak: 4, developing: 3, learning: 2, strong: 1 };
 
   if (!stored || !setup) {
-    if (setup) setup.innerHTML = `<h2>No current curriculum</h2><p>Import a curriculum to make it the current Practice curriculum.</p><p><a class="new-session-button" href="/import">Import curriculum</a></p>`;
+    if (setup) setup.innerHTML = `<div class="practice-panel"><h2>No current curriculum</h2><p>Import a curriculum to make it the current Practice curriculum.</p><a class="new-session-button" href="/import">Import curriculum</a></div>`;
   } else {
-    const concepts = stored.curriculum.concepts;
-    const conceptLabel = (id: string) => concepts.find((concept) => concept.id === id)?.label ?? id;
+    const sourceText = stored.sourceText?.trim() || stored.curriculum.concepts.map((concept) => `## ${concept.label}\n${concept.description ?? ""}`).join("\n\n");
+    const sections = buildLearnSections(stored.curriculum, sourceText);
+    const groups = buildLessonGroups(sections);
+    const topics = buildPracticeTopics(stored.curriculum, groups);
     const attempts = readPracticeAttempts().filter((attempt) => attempt.curriculumId === stored.curriculum.id);
     const mastery = getConceptMastery(attempts);
     const masteryByConcept = new Map(mastery.map((item) => [item.concept, item]));
+    const coverage = new Map(topics.map((topic) => [topic.id, topicQuestionCount(allQuestions, topic)]));
+    const uncovered = topics.filter((topic) => (coverage.get(topic.id) ?? 0) === 0).length;
+    const underCovered = topics.filter((topic) => (coverage.get(topic.id) ?? 0) < 3);
 
-    const title = document.createElement("h2");
-    title.textContent = stored.curriculum.title;
-    const description = document.createElement("p");
-    description.textContent = "Adaptive Practice is the default. It prioritizes concepts that need attention while keeping broader retrieval in the mix.";
+    const panel = document.createElement("div"); panel.className = "practice-panel";
+    const title = document.createElement("h2"); title.textContent = stored.curriculum.title;
+    const summary = document.createElement("p"); summary.className = "practice-summary"; summary.textContent = `${allQuestions.length} validated assessment questions across ${topics.length} learner-facing practice topics${uncovered ? ` · ${uncovered} topics currently have no coverage` : ""}.`;
+    const description = document.createElement("p"); description.className = "practice-description"; description.textContent = "Adaptive Practice prioritizes topics that need attention while keeping broader retrieval in the mix.";
 
-    const modeWrap = document.createElement("div");
-    modeWrap.className = "practice-choice-row";
-    const modeLabel = document.createElement("label");
-    modeLabel.htmlFor = "practice-mode";
-    modeLabel.textContent = "Practice mode";
-    const mode = document.createElement("select");
-    mode.id = "practice-mode";
-    mode.innerHTML = `<option value="adaptive">Adaptive practice</option><option value="all">All concepts</option><option value="selected">Choose concepts</option>`;
-    modeWrap.append(modeLabel, mode);
+    const mode = document.createElement("div"); mode.className = "practice-segmented"; mode.setAttribute("role", "group"); mode.setAttribute("aria-label", "Practice mode");
+    const modes = [{ id: "adaptive", label: "Adaptive" }, { id: "all", label: "All topics" }, { id: "selected", label: "Choose topics" }];
+    let selectedMode = "adaptive";
+    modes.forEach((item) => { const button = document.createElement("button"); button.type = "button"; button.dataset.mode = item.id; button.textContent = item.label; button.className = item.id === selectedMode ? "is-active" : ""; button.addEventListener("click", () => { selectedMode = item.id; mode.querySelectorAll("button").forEach((node) => node.classList.toggle("is-active", (node as HTMLButtonElement).dataset.mode === item.id)); topicPicker.hidden = selectedMode !== "selected"; }); mode.append(button); });
 
-    const conceptBox = document.createElement("fieldset");
-    conceptBox.className = "concept-picker";
-    conceptBox.hidden = true;
-    const legend = document.createElement("legend");
-    legend.textContent = "Concepts";
-    conceptBox.append(legend);
-    concepts.forEach((concept) => {
-      const label = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = concept.id;
-      const status = masteryByConcept.get(concept.id)?.status;
-      label.append(input, document.createTextNode(` ${concept.label}${status ? ` · ${status}` : ""}`));
-      conceptBox.append(label);
+    const topicPicker = document.createElement("div"); topicPicker.className = "practice-topic-grid"; topicPicker.hidden = true;
+    topics.forEach((topic, index) => {
+      const card = document.createElement("label"); card.className = "practice-topic-card";
+      const input = document.createElement("input"); input.type = "checkbox"; input.value = topic.id;
+      const copy = document.createElement("span"); copy.className = "topic-copy";
+      const heading = document.createElement("strong"); heading.textContent = `${index + 1}. ${topic.title}`;
+      const count = coverage.get(topic.id) ?? 0;
+      const states = topic.conceptIds.map((id) => masteryByConcept.get(id)?.status).filter(Boolean) as string[];
+      const topicState = states.sort((a, b) => (statusRank[b] ?? 0) - (statusRank[a] ?? 0))[0];
+      const meta = document.createElement("small"); meta.textContent = `${count} question${count === 1 ? "" : "s"}${topicState ? ` · ${topicState}` : ""}`;
+      copy.append(heading, meta); card.append(input, copy); topicPicker.append(card);
     });
 
-    const lengthWrap = document.createElement("div");
-    lengthWrap.className = "practice-choice-row";
-    const lengthLabel = document.createElement("label");
-    lengthLabel.htmlFor = "practice-length";
-    lengthLabel.textContent = "Session length";
-    const length = document.createElement("select");
-    length.id = "practice-length";
-    [5, 10, 15].forEach((value) => {
-      const option = document.createElement("option"); option.value = String(value); option.textContent = String(value); length.append(option);
-    });
-    lengthWrap.append(lengthLabel, length);
+    const controls = document.createElement("div"); controls.className = "practice-controls";
+    const lengthGroup = document.createElement("div"); lengthGroup.className = "length-group"; const lengthLabel = document.createElement("span"); lengthLabel.textContent = "Session length"; const lengthButtons = document.createElement("div"); lengthButtons.className = "length-buttons";
+    let requestedLength = 5;
+    [5, 10, 15].forEach((value) => { const button = document.createElement("button"); button.type = "button"; button.textContent = String(value); button.className = value === requestedLength ? "is-active" : ""; button.addEventListener("click", () => { requestedLength = value; lengthButtons.querySelectorAll("button").forEach((node) => node.classList.toggle("is-active", node === button)); }); lengthButtons.append(button); });
+    lengthGroup.append(lengthLabel, lengthButtons);
+    const start = document.createElement("button"); start.type = "button"; start.className = "new-session-button"; start.textContent = "Start practice"; controls.append(lengthGroup, start);
 
-    const start = document.createElement("button");
-    start.type = "button";
-    start.className = "new-session-button";
-    start.textContent = "Start practice";
-    const note = document.createElement("p");
-    note.className = "practice-availability";
-    note.textContent = `${allQuestions.length} validated question${allQuestions.length === 1 ? "" : "s"} available for this curriculum.`;
-    setup.replaceChildren(title, description, modeWrap, conceptBox, lengthWrap, start, note);
+    const bank = document.createElement("section"); bank.className = "practice-bank";
+    const bankHeading = document.createElement("div"); const bankTitle = document.createElement("strong"); bankTitle.textContent = "Practice-bank coverage"; const bankCopy = document.createElement("p"); bankCopy.textContent = underCovered.length ? `${underCovered.length} of ${topics.length} topics have fewer than 3 validated questions.` : "Every practice topic has at least 3 validated questions."; bankHeading.append(bankTitle, bankCopy);
+    const build = document.createElement("button"); build.type = "button"; build.className = "secondary-button"; build.textContent = "Build practice bank"; build.hidden = underCovered.length === 0;
+    const bankStatus = document.createElement("p"); bankStatus.className = "bank-status"; bankStatus.setAttribute("aria-live", "polite");
+    bank.append(bankHeading, build, bankStatus);
+    panel.append(title, summary, description, mode, topicPicker, controls, bank); setup.replaceChildren(panel);
 
-    mode.addEventListener("change", () => { conceptBox.hidden = mode.value !== "selected"; });
-
-    let questions: typeof allQuestions = [];
-    let current = 0;
-    let score = 0;
-    let answered = false;
-    let sessionId = "";
-    let startedAt = "";
-
-    const questionConcepts = (question: (typeof allQuestions)[number]) => new Set([...(question.concepts ?? []), ...(question.masteryConcept ? [question.masteryConcept] : [])]);
-    const matches = (question: (typeof allQuestions)[number], ids: Set<string>) => [...questionConcepts(question)].some((id) => ids.has(id));
+    let questions: typeof allQuestions = []; let current = 0; let score = 0; let answered = false; let sessionId = ""; let startedAt = "";
 
     const chooseQuestions = () => {
-      const requested = Number(length.value);
-      if (mode.value === "all") return shuffle(allQuestions).slice(0, requested);
-      if (mode.value === "selected") {
-        const selected = new Set(Array.from(conceptBox.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => input.value));
-        return shuffle(allQuestions.filter((question) => matches(question, selected))).slice(0, requested);
+      if (selectedMode === "all") return shuffle(allQuestions).slice(0, requestedLength);
+      if (selectedMode === "selected") {
+        const ids = new Set(Array.from(topicPicker.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => input.value));
+        return shuffle(allQuestions.filter((question) => topics.some((topic) => ids.has(topic.id) && questionMatchesPracticeTopic(question, topic)))).slice(0, requestedLength);
       }
-
-      const targets = getTargetConcepts(attempts, Math.max(5, concepts.length)).map((item) => item.concept);
-      const targetIds = new Set(targets);
-      const targeted = shuffle(allQuestions.filter((question) => matches(question, targetIds)));
-      const remaining = shuffle(allQuestions.filter((question) => !matches(question, targetIds)));
-      const targetCount = Math.min(targeted.length, Math.max(1, Math.ceil(requested * 0.7)));
-      return shuffle([...targeted.slice(0, targetCount), ...remaining.slice(0, requested - targetCount)]).slice(0, requested);
+      const targetConcepts = new Set(getTargetConcepts(attempts, Math.max(5, stored.curriculum.concepts.length)).map((item) => item.concept));
+      const targetTopics = topics.filter((topic) => topic.conceptIds.some((id) => targetConcepts.has(id)));
+      const targeted = shuffle(allQuestions.filter((question) => targetTopics.some((topic) => questionMatchesPracticeTopic(question, topic))));
+      const remaining = shuffle(allQuestions.filter((question) => !targeted.some((target) => target.id === question.id)));
+      const targetCount = targetTopics.length ? Math.min(targeted.length, Math.max(1, Math.ceil(requestedLength * .7))) : 0;
+      return shuffle([...targeted.slice(0, targetCount), ...remaining.slice(0, requestedLength - targetCount)]).slice(0, requestedLength);
     };
 
-    const finish = () => {
-      session!.hidden = true;
-      complete!.hidden = false;
-      finalScore!.textContent = String(score);
-      finalTotal!.textContent = String(questions.length);
-      saveSessionSummary({ id: sessionId, mode: `Adaptive practice · ${stored.curriculum.title}`, requestedLength: String(questions.length), startedAt, completedAt: new Date().toISOString(), questionCount: questions.length, answeredCount: questions.length, correctCount: score, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title });
-    };
+    const finish = () => { session!.hidden = true; complete!.hidden = false; finalScore!.textContent = String(score); finalTotal!.textContent = String(questions.length); saveSessionSummary({ id: sessionId, mode: `${selectedMode} practice · ${stored.curriculum.title}`, requestedLength: String(questions.length), startedAt, completedAt: new Date().toISOString(), questionCount: questions.length, answeredCount: questions.length, correctCount: score, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title }); };
+    const renderQuestion = () => { answered = false; actions!.hidden = true; const question = questions[current]; progress!.textContent = `Question ${current + 1} of ${questions.length}`; scoreNode!.textContent = String(score); answeredNode!.textContent = String(current); const heading = document.createElement("h2"); heading.textContent = question.prompt; const answers = document.createElement("div"); answers.className = "answers"; const review = document.createElement("div"); review.className = "review"; review.hidden = true; shuffle(question.answers).forEach((answer) => { const label = document.createElement("label"); label.className = "answer-option"; const input = document.createElement("input"); input.type = "radio"; input.name = `practice-${question.id}`; input.value = answer.id; label.append(input, document.createTextNode(answer.text)); answers.append(label); input.addEventListener("change", () => { if (answered) return; answered = true; if (answer.correct) score += 1; const correct = question.answers.find((item) => item.correct); answers.querySelectorAll<HTMLInputElement>("input").forEach((item) => { item.disabled = true; if (correct && item.value === correct.id) item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct"); }); if (!answer.correct) label.dataset.result = "incorrect"; const result = document.createElement("p"); result.textContent = answer.correct ? "Correct." : "Not quite."; review.append(result); if (!answer.correct && correct) { const correction = document.createElement("p"); const strong = document.createElement("strong"); strong.textContent = "Correct answer: "; correction.append(strong, document.createTextNode(correct.text)); review.append(correction); } if (question.explanation || answer.feedback) { const explanation = document.createElement("p"); explanation.textContent = question.explanation || answer.feedback; review.append(explanation); } review.hidden = false; savePracticeAttempt({ questionId: question.id, answerId: answer.id, correct: answer.correct, answeredAt: new Date().toISOString(), sessionId, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title, ...(question.topic && { topic: question.topic }), ...(question.concepts?.length && { concepts: question.concepts }), ...(question.masteryConcept && { masteryConcept: question.masteryConcept }), ...(question.difficulty && { difficulty: question.difficulty }), ...(question.learningStage && { learningStage: question.learningStage }) }); scoreNode!.textContent = String(score); answeredNode!.textContent = String(current + 1); actions!.hidden = false; next!.textContent = current === questions.length - 1 ? "See results" : "Next question"; }); }); host!.replaceChildren(heading, answers, review); };
+    const begin = () => { questions = chooseQuestions(); if (!questions.length) { summary.textContent = selectedMode === "selected" ? "Choose at least one topic that currently has assessment coverage." : "No questions are available for this selection yet."; return; } current = 0; score = 0; sessionId = crypto.randomUUID(); startedAt = new Date().toISOString(); setup.hidden = true; complete!.hidden = true; session!.hidden = false; renderQuestion(); };
 
-    const renderQuestion = () => {
-      answered = false;
-      actions!.hidden = true;
-      const question = questions[current];
-      progress!.textContent = `Question ${current + 1} of ${questions.length}`;
-      scoreNode!.textContent = String(score);
-      answeredNode!.textContent = String(current);
-      const heading = document.createElement("h2"); heading.textContent = question.prompt;
-      const answers = document.createElement("div"); answers.className = "answers";
-      const review = document.createElement("div"); review.className = "review"; review.hidden = true;
-      shuffle(question.answers).forEach((answer) => {
-        const label = document.createElement("label"); label.className = "answer-option";
-        const input = document.createElement("input"); input.type = "radio"; input.name = `practice-${question.id}`; input.value = answer.id;
-        label.append(input, document.createTextNode(answer.text)); answers.append(label);
-        input.addEventListener("change", () => {
-          if (answered) return; answered = true;
-          if (answer.correct) score += 1;
-          const correct = question.answers.find((item) => item.correct);
-          answers.querySelectorAll<HTMLInputElement>("input").forEach((item) => { item.disabled = true; if (correct && item.value === correct.id) item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct"); });
-          if (!answer.correct) label.dataset.result = "incorrect";
-          const result = document.createElement("p"); result.textContent = answer.correct ? "Correct." : "Not quite."; review.append(result);
-          if (!answer.correct && correct) { const correction = document.createElement("p"); const strong = document.createElement("strong"); strong.textContent = "Correct answer: "; correction.append(strong, document.createTextNode(correct.text)); review.append(correction); }
-          if (question.explanation || answer.feedback) { const explanation = document.createElement("p"); explanation.textContent = question.explanation || answer.feedback; review.append(explanation); }
-          review.hidden = false;
-          savePracticeAttempt({ questionId: question.id, answerId: answer.id, correct: answer.correct, answeredAt: new Date().toISOString(), sessionId, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title, ...(question.topic && { topic: question.topic }), ...(question.concepts?.length && { concepts: question.concepts }), ...(question.masteryConcept && { masteryConcept: question.masteryConcept }), ...(question.difficulty && { difficulty: question.difficulty }), ...(question.learningStage && { learningStage: question.learningStage }) });
-          scoreNode!.textContent = String(score); answeredNode!.textContent = String(current + 1); actions!.hidden = false; next!.textContent = current === questions.length - 1 ? "See results" : "Next question";
-        });
-      });
-      host!.replaceChildren(heading, answers, review);
-    };
+    build.addEventListener("click", async () => {
+      if (!isQuestionGenerationConfigured()) { bankStatus.textContent = "Question generation is not configured."; return; }
+      build.disabled = true; start.disabled = true; let working = stored.curriculum; let added = 0; let attemptedTopics = 0;
+      try {
+        for (const topic of underCovered) {
+          const topicConcepts = working.concepts.filter((concept) => topic.conceptIds.includes(concept.id));
+          const topicObjectives = working.learningObjectives.filter((objective) => topic.conceptIds.includes(objective.conceptId));
+          if (!topicConcepts.length || !topicObjectives.length) continue;
+          attemptedTopics += 1; bankStatus.textContent = `Building ${topic.title}… (${attemptedTopics} topic${attemptedTopics === 1 ? "" : "s"} attempted)`;
+          const miniCurriculum = { ...working, concepts: topicConcepts, learningObjectives: topicObjectives, questionDrafts: [] };
+          const request = createQuestionGenerationRequest(miniCurriculum, lessonGroupSource(topic.group), 4, "classroom");
+          const result = await generateQuestionDrafts(request);
+          if (!result.ok || !result.drafts.length) continue;
+          const existingIds = new Set(working.questionDrafts.map((draft) => draft.id)); const existingSemantic = new Set(working.questionDrafts.map((draft) => draft.semanticKey).filter(Boolean));
+          const fresh = result.drafts.filter((draft) => !existingIds.has(draft.id) && (!draft.semanticKey || !existingSemantic.has(draft.semanticKey)));
+          if (!fresh.length) continue;
+          working = { ...working, questionDrafts: [...working.questionDrafts, ...fresh] }; added += fresh.length; saveImportedCurriculum(working, stored.sourceText);
+        }
+        bankStatus.textContent = added ? `Added ${added} validated question${added === 1 ? "" : "s"}. Refreshing coverage…` : "No additional questions survived the quality gate. The source may not support more assessment items yet.";
+        if (added) setTimeout(() => window.location.reload(), 700);
+      } catch (error) { bankStatus.textContent = error instanceof Error ? error.message : "Practice-bank generation stopped."; }
+      finally { build.disabled = false; start.disabled = false; }
+    });
 
-    const begin = () => {
-      questions = chooseQuestions();
-      if (!questions.length) { note.textContent = mode.value === "selected" ? "Choose at least one concept with available questions." : "No questions are available for this practice selection yet."; return; }
-      current = 0; score = 0; sessionId = crypto.randomUUID(); startedAt = new Date().toISOString(); setup.hidden = true; complete!.hidden = true; session!.hidden = false; renderQuestion();
-    };
-
-    start.addEventListener("click", begin);
-    again?.addEventListener("click", () => { complete!.hidden = true; setup.hidden = false; });
-    next?.addEventListener("click", () => { if (!answered) return; if (current === questions.length - 1) finish(); else { current += 1; renderQuestion(); } });
+    start.addEventListener("click", begin); again?.addEventListener("click", () => { complete!.hidden = true; setup.hidden = false; }); next?.addEventListener("click", () => { if (!answered) return; if (current === questions.length - 1) finish(); else { current += 1; renderQuestion(); } });
   }
 </script>
 
 <style>
-.practice-hub{padding-bottom:4rem}.practice-choice-row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin:1rem 0}.practice-choice-row label{font-weight:700}.practice-choice-row select{min-width:12rem}.concept-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem;margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem}.concept-picker legend{font-weight:700;padding:0 .35rem}.concept-picker label{display:block}.practice-availability{color:var(--text-muted);margin-top:1rem}.answer-option{display:flex;gap:.75rem;align-items:flex-start;padding:.85rem;margin:.65rem 0;border:1px solid var(--border);border-radius:.65rem}.answer-option[data-result="correct"]{border-color:var(--success,#5fa46a)}.answer-option[data-result="incorrect"]{border-color:var(--danger,#b85c5c)}.review{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.practice-hub{padding-bottom:4rem}.practice-setup{max-width:var(--reading-width)}.practice-panel{padding:1.35rem;border:1px solid var(--border);border-radius:1rem;background:var(--surface)}.practice-panel h2{margin-top:0}.practice-summary{font-weight:650}.practice-description{color:var(--text-muted)}.practice-segmented,.length-buttons{display:inline-flex;gap:.25rem;padding:.25rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface-alt)}.practice-segmented{margin:1rem 0}.practice-segmented button,.length-buttons button{border:0;border-radius:.55rem;padding:.6rem .85rem;background:transparent;color:var(--text);font:inherit;cursor:pointer}.practice-segmented button.is-active,.length-buttons button.is-active{background:var(--accent);color:white}.practice-topic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.65rem;margin:1rem 0}.practice-topic-card{display:flex;gap:.65rem;align-items:flex-start;padding:.8rem;border:1px solid var(--border);border-radius:.7rem;cursor:pointer}.practice-topic-card:has(input:checked){border-color:var(--accent);background:var(--surface-alt)}.practice-topic-card input{margin-top:.2rem}.topic-copy{display:grid;gap:.2rem}.topic-copy small{color:var(--text-muted)}.practice-controls{display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-top:1rem}.length-group{display:grid;gap:.4rem}.length-group>span{font-weight:700}.practice-bank{display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)}.practice-bank p{margin:.25rem 0;color:var(--text-muted)}.bank-status{width:100%}.answer-option{display:flex;gap:.75rem;align-items:flex-start;padding:.85rem;margin:.65rem 0;border:1px solid var(--border);border-radius:.65rem}.answer-option[data-result="correct"]{border-color:var(--success,#5fa46a)}.answer-option[data-result="incorrect"]{border-color:var(--danger,#b85c5c)}.review{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}@media(max-width:620px){.practice-segmented{display:grid;width:100%}.practice-topic-grid{grid-template-columns:1fr}.practice-controls{display:grid}.practice-controls>.new-session-button{width:100%}.practice-bank{display:grid}}
 </style>
