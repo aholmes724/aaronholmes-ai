@@ -13,16 +13,20 @@ import Layout from "../../layouts/Layout.astro";
       <button id="clear-sequence" class="secondary-button" type="button">Clear generated lessons</button>
     </div>
     <section id="generation-progress" class="generation-progress" hidden aria-live="polite">
-      <div class="generation-progress-heading">
-        <strong id="generation-progress-label">Generating lessons…</strong>
-        <span id="generation-progress-count"></span>
-      </div>
+      <div class="generation-progress-heading"><strong id="generation-progress-label">Generating lessons…</strong><span id="generation-progress-count"></span></div>
       <div class="generation-progress-track" aria-hidden="true"><span id="generation-progress-bar"></span></div>
-      <p id="generation-progress-detail">Please keep this tab open. Each lesson is generated once and saved as it completes.</p>
+      <p id="generation-progress-detail">Please keep this tab open.</p>
     </section>
     <p id="sequence-status" class="sequence-status" aria-live="polite"></p>
     <nav id="lesson-nav" class="lesson-nav" hidden aria-label="Generated lesson navigation"></nav>
     <div id="group-list" class="group-list"></div>
+    <section id="queue-actions" class="queue-actions" hidden>
+      <p id="queue-summary"></p>
+      <div class="queue-buttons">
+        <button id="generate-next" class="new-session-button" type="button">Generate next lesson →</button>
+        <button id="generate-next-three" class="secondary-button" type="button">Generate next 3 lessons</button>
+      </div>
+    </section>
   </main>
 </Layout>
 
@@ -41,6 +45,10 @@ import Layout from "../../layouts/Layout.astro";
   const status = document.querySelector<HTMLElement>("#sequence-status");
   const list = document.querySelector<HTMLElement>("#group-list");
   const lessonNav = document.querySelector<HTMLElement>("#lesson-nav");
+  const queueActions = document.querySelector<HTMLElement>("#queue-actions");
+  const queueSummary = document.querySelector<HTMLElement>("#queue-summary");
+  const nextButton = document.querySelector<HTMLButtonElement>("#generate-next");
+  const nextThreeButton = document.querySelector<HTMLButtonElement>("#generate-next-three");
   const progress = document.querySelector<HTMLElement>("#generation-progress");
   const progressLabel = document.querySelector<HTMLElement>("#generation-progress-label");
   const progressCount = document.querySelector<HTMLElement>("#generation-progress-count");
@@ -52,38 +60,27 @@ import Layout from "../../layouts/Layout.astro";
   const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70) || "lesson";
   const lessonId = (index: number) => `lesson-${index + 1}`;
 
-  const scrollToLesson = (index: number) => {
-    document.getElementById(lessonId(index))?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const downloadText = (filename: string, text: string) => {
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove();
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const lessonMarkdown = (group: LessonGroup, lesson: GeneratedLesson, index: number) => {
-    const lines = [
-      `# ${lesson.title}`, "", `**Lesson ${index + 1}**`, stored ? `**Curriculum:** ${stored.curriculum.title}` : "", "",
-      `**Learning goal:** ${lesson.learningGoal}`, "", "## Key idea", "", lesson.keyIdea, "",
-    ];
+    const lines = [`# ${lesson.title}`, "", `**Lesson ${index + 1}**`, stored ? `**Curriculum:** ${stored.curriculum.title}` : "", "", `**Learning goal:** ${lesson.learningGoal}`, "", "## Key idea", "", lesson.keyIdea, ""];
     lesson.blocks.forEach((block) => lines.push(`## ${block.heading}`, "", block.body, ""));
     lines.push("## Distinctions that matter", "", ...lesson.distinctions.map((item) => `- ${item}`), "");
     if (lesson.keyTerms.length) {
       lines.push("## Key terms", "");
-      lesson.keyTerms.forEach((term) => {
-        lines.push(`- **${term.term}${term.expansion ? ` — ${term.expansion}` : ""}:** ${term.definition}`);
-        if (term.whyItMatters) lines.push(`  - Why it matters: ${term.whyItMatters}`);
-      });
+      lesson.keyTerms.forEach((term) => { lines.push(`- **${term.term}${term.expansion ? ` — ${term.expansion}` : ""}:** ${term.definition}`); if (term.whyItMatters) lines.push(`  - Why it matters: ${term.whyItMatters}`); });
       lines.push("");
     }
     lines.push("## Remember", "", lesson.memoryHook, "", "## Quick check", "", lesson.quickCheck.prompt, "");
     lesson.quickCheck.options.forEach((option) => lines.push(`- ${option.text}${option.correct ? " *(correct)*" : ""} — ${option.feedback}`));
     lines.push("", "## Source sections", "", ...group.sections.map((section) => `- ${clean(section.title)}`));
     if (lesson.sourceNote) lines.push("", `*${lesson.sourceNote}*`);
-    return lines.filter((line) => line !== undefined).join("\n");
+    return lines.join("\n");
   };
 
   const getCachedLesson = (group: LessonGroup): GeneratedLesson | null => {
@@ -93,128 +90,83 @@ import Layout from "../../layouts/Layout.astro";
     try { return JSON.parse(raw) as GeneratedLesson; } catch { sessionStorage.removeItem(cacheKey(stored.curriculum.id, group.id)); return null; }
   };
 
-  const renderLesson = (group: LessonGroup, lesson: GeneratedLesson, index: number, total: number) => {
-    const article = document.createElement("article"); article.className = "sequence-card generated-sequence-card"; article.id = lessonId(index);
-    const eyebrow = document.createElement("p"); eyebrow.className = "lesson-eyebrow"; eyebrow.textContent = `Lesson ${index + 1} of ${total}`;
-    const header = document.createElement("div"); header.className = "sequence-card-heading";
-    const titleWrap = document.createElement("div");
-    const heading = document.createElement("h2"); heading.textContent = lesson.title;
-    const goal = document.createElement("p"); goal.className = "learning-goal"; goal.textContent = lesson.learningGoal;
-    titleWrap.append(heading, goal);
-    const exportButton = document.createElement("button"); exportButton.type = "button"; exportButton.className = "secondary-button compact-button"; exportButton.textContent = "Export lesson";
-    exportButton.addEventListener("click", () => downloadText(`${String(index + 1).padStart(2, "0")}-${slugify(lesson.title)}.md`, lessonMarkdown(group, lesson, index)));
-    header.append(titleWrap, exportButton);
-    const keyHeading = document.createElement("h3"); keyHeading.textContent = "Key idea";
-    const key = document.createElement("p"); key.textContent = lesson.keyIdea;
-    const details = document.createElement("details"); const summary = document.createElement("summary"); summary.textContent = "View lesson"; details.append(summary);
-    lesson.blocks.forEach((block) => { const h = document.createElement("h3"); h.textContent = block.heading; const p = document.createElement("p"); p.textContent = block.body; details.append(h,p); });
-    const source = document.createElement("p"); source.className = "group-source-count"; source.textContent = `Built from ${group.sections.length} source section${group.sections.length === 1 ? "" : "s"}: ${group.sections.map((section) => clean(section.title)).join(" · ")}`;
-    const footer = document.createElement("div"); footer.className = "lesson-footer-nav";
-    if (index > 0) {
-      const previous = document.createElement("button"); previous.type = "button"; previous.className = "secondary-button"; previous.textContent = "← Previous lesson"; previous.addEventListener("click", () => scrollToLesson(index - 1)); footer.append(previous);
-    }
-    if (index < total - 1) {
-      const next = document.createElement("button"); next.type = "button"; next.className = "new-session-button"; next.textContent = `Next lesson →`; next.addEventListener("click", () => scrollToLesson(index + 1)); footer.append(next);
-    } else {
-      const backToTop = document.createElement("button"); backToTop.type = "button"; backToTop.className = "secondary-button"; backToTop.textContent = "Back to lesson 1"; backToTop.addEventListener("click", () => scrollToLesson(0)); footer.append(backToTop);
-    }
-    article.append(eyebrow,header,keyHeading,key,details,source,footer); return article;
-  };
-
-  const renderGroup = (group: LessonGroup, index: number, total: number) => {
-    if (!list || !stored) return;
-    const cached = getCachedLesson(group);
-    if (cached) { list.append(renderLesson(group, cached, index, total)); return; }
-    const article = document.createElement("article"); article.className = "sequence-card"; article.id = lessonId(index);
-    const eyebrow = document.createElement("p"); eyebrow.className = "lesson-eyebrow"; eyebrow.textContent = `Proposed lesson ${index + 1}`;
-    const heading = document.createElement("h2"); heading.textContent = group.title;
-    const source = document.createElement("p"); source.textContent = group.sections.map((section) => clean(section.title)).join(" · ");
-    const count = document.createElement("small"); count.textContent = `${group.sections.length} source section${group.sections.length === 1 ? "" : "s"}`;
-    article.append(eyebrow,heading,source,count); list.append(article);
-  };
-
   if (!stored || !intro || !list) {
     if (intro) intro.innerHTML = `<h2>No curriculum saved</h2><p><a href="/import">Import curriculum</a> first.</p>`;
   } else {
     const sourceText = stored.sourceText?.trim() || stored.curriculum.concepts.map((concept) => `## ${concept.label}\n${concept.description ?? ""}`).join("\n\n");
     const sections = buildLearnSections(stored.curriculum, sourceText);
     const groups = buildLessonGroups(sections);
-    const firstThree = groups.slice(0, 3);
-    intro.innerHTML = `<h2>${stored.curriculum.title}</h2><p>${groups.length} proposed teaching units from ${sections.filter((section) => section.role.role === "learner-content").length} learner-facing source sections.</p><p>This prototype generates only the first three groups so we can judge grouping and lesson quality before scaling.</p>`;
+    intro.innerHTML = `<h2>${stored.curriculum.title}</h2><p>${groups.length} proposed teaching units from ${sections.filter((section) => section.role.role === "learner-content").length} learner-facing source sections.</p>`;
     actions!.hidden = false;
 
-    const updateNavigation = () => {
-      if (!lessonNav) return;
-      const ready = firstThree.map((group, index) => ({ index, lesson: getCachedLesson(group) })).filter((item) => Boolean(item.lesson));
-      lessonNav.replaceChildren();
-      if (ready.length < 2) { lessonNav.hidden = true; return; }
-      lessonNav.hidden = false;
-      const label = document.createElement("strong"); label.textContent = "Jump to lesson"; lessonNav.append(label);
-      ready.forEach(({ index, lesson }) => {
-        const button = document.createElement("button"); button.type = "button"; button.className = "secondary-button compact-button"; button.textContent = `${index + 1}. ${lesson!.title}`; button.addEventListener("click", () => scrollToLesson(index)); lessonNav.append(button);
-      });
+    const generatedCount = () => {
+      let count = 0;
+      for (const group of groups) { if (!getCachedLesson(group)) break; count += 1; }
+      return count;
     };
-    const updateExportAvailability = () => {
-      if (!exportSequenceButton) return;
-      exportSequenceButton.hidden = !firstThree.every((group) => Boolean(getCachedLesson(group)));
-    };
-    const redraw = () => { list.replaceChildren(); firstThree.forEach((group, index) => renderGroup(group, index, firstThree.length)); updateExportAvailability(); updateNavigation(); };
-    redraw();
 
-    generateButton?.addEventListener("click", async () => {
+    const renderLesson = (group: LessonGroup, lesson: GeneratedLesson, index: number) => {
+      const article = document.createElement("article"); article.className = "sequence-card generated-sequence-card"; article.id = lessonId(index);
+      const eyebrow = document.createElement("p"); eyebrow.className = "lesson-eyebrow"; eyebrow.textContent = `Lesson ${index + 1} of ${groups.length}`;
+      const header = document.createElement("div"); header.className = "sequence-card-heading";
+      const titleWrap = document.createElement("div"); const heading = document.createElement("h2"); heading.textContent = lesson.title; const goal = document.createElement("p"); goal.className = "learning-goal"; goal.textContent = lesson.learningGoal; titleWrap.append(heading, goal);
+      const exportButton = document.createElement("button"); exportButton.type = "button"; exportButton.className = "secondary-button compact-button"; exportButton.textContent = "Export lesson"; exportButton.addEventListener("click", () => downloadText(`${String(index + 1).padStart(2, "0")}-${slugify(lesson.title)}.md`, lessonMarkdown(group, lesson, index)));
+      header.append(titleWrap, exportButton);
+      const keyHeading = document.createElement("h3"); keyHeading.textContent = "Key idea"; const key = document.createElement("p"); key.textContent = lesson.keyIdea;
+      const details = document.createElement("details"); const summary = document.createElement("summary"); summary.textContent = "View lesson"; details.append(summary); lesson.blocks.forEach((block) => { const h = document.createElement("h3"); h.textContent = block.heading; const p = document.createElement("p"); p.textContent = block.body; details.append(h,p); });
+      const source = document.createElement("p"); source.className = "group-source-count"; source.textContent = `Built from ${group.sections.length} source section${group.sections.length === 1 ? "" : "s"}: ${group.sections.map((section) => clean(section.title)).join(" · ")}`;
+      article.append(eyebrow,header,keyHeading,key,details,source); return article;
+    };
+
+    const redraw = () => {
+      list.replaceChildren(); lessonNav?.replaceChildren();
+      const count = generatedCount();
+      for (let index = 0; index < count; index += 1) {
+        const lesson = getCachedLesson(groups[index]); if (!lesson) break; list.append(renderLesson(groups[index], lesson, index));
+        if (lessonNav) { const b = document.createElement("button"); b.type = "button"; b.className = "secondary-button compact-button"; b.textContent = `${index + 1}. ${lesson.title}`; b.addEventListener("click", () => document.getElementById(lessonId(index))?.scrollIntoView({behavior:"smooth"})); lessonNav.append(b); }
+      }
+      if (lessonNav) lessonNav.hidden = count < 2;
+      if (exportSequenceButton) exportSequenceButton.hidden = count === 0;
+      if (generateButton) generateButton.hidden = count > 0;
+      if (queueActions && queueSummary) {
+        const remaining = groups.length - count;
+        queueActions.hidden = count === 0 || remaining === 0;
+        if (remaining > 0) queueSummary.textContent = `${count} of ${groups.length} lessons generated. ${remaining} remaining.`;
+      }
+      if (nextThreeButton) nextThreeButton.textContent = `Generate next ${Math.min(3, Math.max(0, groups.length - count))} lessons`;
+    };
+
+    const generateRange = async (amount: number) => {
       if (!isLessonGenerationConfigured()) { if (status) status.textContent = "Lesson generation is not configured."; return; }
-      generateButton.disabled = true;
-      if (clearButton) clearButton.disabled = true;
-      if (progress) progress.hidden = false;
-      if (status) status.textContent = "";
-      const originalLabel = generateButton.textContent || "Generate first 3 lessons";
+      const start = generatedCount(); const targets = groups.slice(start, start + amount); if (!targets.length) return;
+      [generateButton, clearButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = true; });
+      if (progress) progress.hidden = false; if (status) status.textContent = "";
       try {
-        for (let index = 0; index < firstThree.length; index += 1) {
-          const group = firstThree[index];
-          const alreadyCached = getCachedLesson(group);
-          const current = index + 1;
-          const percent = Math.round((index / firstThree.length) * 100);
-          generateButton.textContent = `Generating ${current} of ${firstThree.length}…`;
-          if (progressLabel) progressLabel.textContent = alreadyCached ? `Lesson ${current} already generated` : `Generating lesson ${current}: ${group.title}`;
-          if (progressCount) progressCount.textContent = `${current} / ${firstThree.length}`;
-          if (progressBar) progressBar.style.width = `${percent}%`;
-          if (progressDetail) progressDetail.textContent = alreadyCached ? "Using the saved lesson and continuing to the next group." : "Please keep this tab open. This may take a little while; the button is locked until generation finishes.";
-          if (alreadyCached) continue;
-          const groupedSource = lessonGroupSource(group);
-          const lesson = await generateLesson({ curriculumTitle: stored.curriculum.title, sectionTitle: group.title, sourceText: groupedSource, objectivesText: sections.filter((section) => section.role.role === "objectives").map((section) => section.sourceText).join("\n\n"), neighboringContext: "" });
-          sessionStorage.setItem(cacheKey(stored.curriculum.id, group.id), JSON.stringify(lesson));
-          redraw();
-          if (progressBar) progressBar.style.width = `${Math.round((current / firstThree.length) * 100)}%`;
+        for (let offset = 0; offset < targets.length; offset += 1) {
+          const group = targets[offset]; const lessonNumber = start + offset + 1;
+          if (progressLabel) progressLabel.textContent = `Generating lesson ${lessonNumber}: ${group.title}`;
+          if (progressCount) progressCount.textContent = `${offset + 1} / ${targets.length}`;
+          if (progressBar) progressBar.style.width = `${Math.round((offset / targets.length) * 100)}%`;
+          if (progressDetail) progressDetail.textContent = "Please keep this tab open. Generated lessons are saved as they complete.";
+          const lesson = await generateLesson({ curriculumTitle: stored.curriculum.title, sectionTitle: group.title, sourceText: lessonGroupSource(group), objectivesText: sections.filter((section) => section.role.role === "objectives").map((section) => section.sourceText).join("\n\n"), neighboringContext: "" });
+          sessionStorage.setItem(cacheKey(stored.curriculum.id, group.id), JSON.stringify(lesson)); redraw();
         }
-        if (progressLabel) progressLabel.textContent = "Generation complete";
-        if (progressCount) progressCount.textContent = `${firstThree.length} / ${firstThree.length}`;
-        if (progressBar) progressBar.style.width = "100%";
-        if (progressDetail) progressDetail.textContent = "All three lessons are ready. Read lesson 1, then use Next lesson at the bottom of each lesson or the jump controls above.";
-        if (status) status.textContent = "Three grouped lessons generated.";
-        redraw();
-      } catch (error) {
-        if (progressLabel) progressLabel.textContent = "Generation stopped";
-        if (progressDetail) progressDetail.textContent = "Completed lessons were kept. You can try again to continue from the unfinished lesson.";
-        if (status) status.textContent = error instanceof Error ? error.message : "Lesson generation failed.";
-      } finally { generateButton.disabled = false; generateButton.textContent = originalLabel; if (clearButton) clearButton.disabled = false; }
-    });
+        if (progressLabel) progressLabel.textContent = "Generation complete"; if (progressBar) progressBar.style.width = "100%"; if (progressDetail) progressDetail.textContent = "The new lesson content is ready below.";
+        const newCount = generatedCount(); if (status) status.textContent = `${newCount} of ${groups.length} lessons generated.`;
+        document.getElementById(lessonId(start))?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) { if (progressLabel) progressLabel.textContent = "Generation stopped"; if (status) status.textContent = error instanceof Error ? error.message : "Lesson generation failed."; }
+      finally { [generateButton, clearButton, nextButton, nextThreeButton].forEach((button) => { if (button) button.disabled = false; }); redraw(); }
+    };
 
-    exportSequenceButton?.addEventListener("click", () => {
-      const parts: string[] = [`# ${stored.curriculum.title} — Learn sequence`, ""];
-      firstThree.forEach((group, index) => { const lesson = getCachedLesson(group); if (lesson) parts.push(lessonMarkdown(group, lesson, index), "", "---", ""); });
-      downloadText(`${slugify(stored.curriculum.title)}-learn-sequence.md`, parts.join("\n"));
-    });
-
-    clearButton?.addEventListener("click", () => {
-      firstThree.forEach((group) => sessionStorage.removeItem(cacheKey(stored.curriculum.id, group.id)));
-      if (status) status.textContent = "Generated sequence cleared.";
-      if (progress) progress.hidden = true;
-      if (progressBar) progressBar.style.width = "0%";
-      redraw();
-    });
+    generateButton?.addEventListener("click", () => generateRange(3));
+    nextButton?.addEventListener("click", () => generateRange(1));
+    nextThreeButton?.addEventListener("click", () => generateRange(3));
+    exportSequenceButton?.addEventListener("click", () => { const parts = [`# ${stored.curriculum.title} — Learn sequence`, ""]; groups.slice(0, generatedCount()).forEach((group,index)=>{const lesson=getCachedLesson(group);if(lesson)parts.push(lessonMarkdown(group,lesson,index),"","---","");}); downloadText(`${slugify(stored.curriculum.title)}-learn-sequence.md`, parts.join("\n")); });
+    clearButton?.addEventListener("click", () => { groups.forEach((group) => sessionStorage.removeItem(cacheKey(stored.curriculum.id, group.id))); if (status) status.textContent = "Generated sequence cleared."; if (progress) progress.hidden = true; redraw(); });
+    redraw();
   }
 </script>
 
 <style>
-.sequence-shell{padding-bottom:4rem}.sequence-actions{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0}.sequence-status{color:var(--text-muted)}.lesson-nav{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;max-width:var(--reading-width);margin:1rem 0;padding:.75rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface)}.lesson-nav strong{margin-right:.25rem;font-size:.9rem}.generation-progress{max-width:var(--reading-width);margin:1rem 0;padding:1rem;border:1px solid var(--accent);border-radius:.75rem;background:var(--surface-alt)}.generation-progress-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}.generation-progress-track{height:.6rem;margin:.75rem 0;border-radius:999px;overflow:hidden;background:var(--border)}.generation-progress-track span{display:block;width:0;height:100%;background:var(--accent);transition:width .25s ease}.generation-progress p{margin:.35rem 0 0;color:var(--text-muted);font-size:.9rem}.group-list{display:grid;gap:1rem;max-width:var(--reading-width)}.sequence-card{scroll-margin-top:1rem;padding:1.1rem;border:1px solid var(--border);border-radius:.8rem;background:var(--surface)}.sequence-card-heading{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.sequence-card h2{margin:.2rem 0 .55rem}.sequence-card h3{margin:1rem 0 .35rem;font-size:1rem}.sequence-card details{margin-top:1rem}.sequence-card details summary{cursor:pointer;font-weight:650}.sequence-card details p{line-height:1.65}.group-source-count{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.88rem}.lesson-footer-nav{display:flex;justify-content:space-between;gap:.65rem;flex-wrap:wrap;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)}.lesson-eyebrow{margin:0;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}.learning-goal{color:var(--text-muted)}.compact-button{flex:0 0 auto;padding:.45rem .65rem;font-size:.85rem}@media(max-width:620px){.sequence-card-heading{display:grid}.compact-button{justify-self:start}.generation-progress-heading{align-items:flex-start}.lesson-nav{align-items:stretch}.lesson-nav button{width:100%;text-align:left}.lesson-footer-nav button{flex:1 1 auto}}
+.sequence-shell{padding-bottom:4rem}.sequence-actions,.queue-buttons{display:flex;gap:.65rem;flex-wrap:wrap;margin:1rem 0}.sequence-status{color:var(--text-muted)}.lesson-nav{display:flex;gap:.5rem;flex-wrap:wrap;max-width:var(--reading-width);margin:1rem 0}.generation-progress,.queue-actions{max-width:var(--reading-width);margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--surface-alt)}.generation-progress-heading{display:flex;justify-content:space-between;gap:1rem}.generation-progress-track{height:.6rem;margin:.75rem 0;border-radius:999px;overflow:hidden;background:var(--border)}.generation-progress-track span{display:block;width:0;height:100%;background:var(--accent);transition:width .25s}.group-list{display:grid;gap:1rem;max-width:var(--reading-width)}.sequence-card{scroll-margin-top:1rem;padding:1.1rem;border:1px solid var(--border);border-radius:.8rem;background:var(--surface)}.sequence-card-heading{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.sequence-card h2{margin:.2rem 0 .55rem}.sequence-card h3{margin:1rem 0 .35rem;font-size:1rem}.sequence-card details{margin-top:1rem}.sequence-card details summary{cursor:pointer;font-weight:650}.sequence-card details p{line-height:1.65}.group-source-count{margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border);color:var(--text-muted);font-size:.88rem}.lesson-eyebrow{margin:0;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}.learning-goal{color:var(--text-muted)}.compact-button{padding:.45rem .65rem;font-size:.85rem}@media(max-width:620px){.sequence-card-heading{display:grid}.lesson-nav button,.queue-buttons button{width:100%;text-align:left}}
 </style>
