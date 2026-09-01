@@ -1,126 +1,207 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import QuizQuestion from "../../components/QuizQuestion.astro";
-import { allQuestions } from "../../data/questions";
-import { PRACTICE_MODES } from "../../data/practice-modes";
-
-const practiceQuestions = allQuestions;
 ---
 
 <Layout title="Practice | Aaron Holmes">
-    <main
-        class="container"
-        data-session-length={Math.min(practiceQuestions.length, 5)}
-    >
-        <div class="practice-links">
-            <a href="/learn">← Back to Learn</a>
-            <a href="/progress">View progress</a>
-            <a href="/practice/imported">Imported curriculum</a>
-            <a class="new-session-button" href="/practice?mode=weak">
-                Practice weak concepts
-            </a>
-        </div>
+  <main class="container practice-hub">
+    <div class="practice-links">
+      <a href="/learn">← Learn</a>
+      <a href="/progress">Progress</a>
+      <a href="/import">New curriculum</a>
+    </div>
 
-        <h1>Practice</h1>
-
-        <div id="practice-mode-selector" class="practice-mode-selector">
-            {
-                Object.entries(PRACTICE_MODES).map(([modeId, mode]) => (
-                    <button
-                        class="practice-mode-button"
-                        data-mode={modeId}
-                        type="button"
-                        title={mode.description}
-                    >
-                        <span class="mode-icon">{mode.icon}</span>
-                        <span class="mode-label">{mode.label}</span>
-                    </button>
-                ))
-            }
-        </div>
-
-        <div id="practice-mode-info">
-            <p id="practice-description">Review questions across all topics.</p>
-        </div>
-
-        <div class="practice-session-length">
-            <label for="session-length-select">Session length</label>
-            <select id="session-length-select">
-                <option value="5" selected>5</option>
-                <option value="10">10</option>
-                <option value="20">20</option>
-                <option value="all">All</option>
-            </select>
-        </div>
-
-        <div id="practice-empty-state" class="practice-empty-state" hidden>
-            <p>
-                No questions available in this mode yet. Complete more practice
-                sessions to build up your weak concept history.
-            </p>
-            <a href="/practice?mode=all" class="new-session-button"
-                >Try another mode</a
-            >
-        </div>
-
-        <div class="practice-meta">
-            <p id="question-progress" aria-live="polite">
-                <span>Question</span>
-                <strong id="current-question-number">1</strong>
-                <span>of</span>
-                <strong id="session-length"
-                    >{Math.min(practiceQuestions.length, 5)}</strong
-                >
-            </p>
-
-            <p class="practice-score">
-                <span>Score:</span>
-                <strong id="practice-score">0</strong>
-                <span>/</span>
-                <strong id="answered-count">0</strong>
-            </p>
-        </div>
-
-        <div id="practice-questions">
-            {
-                practiceQuestions.map((question) => (
-                    <div hidden data-session-question>
-                        <QuizQuestion question={question} mode="practice" />
-                    </div>
-                ))
-            }
-        </div>
-
-        <div id="next-question-container" class="practice-actions" hidden>
-            <button
-                id="next-question"
-                class="new-session-button"
-                type="button"
-                hidden
-            >
-                Next question
-            </button>
-        </div>
-
-        <section
-            id="session-complete"
-            class="practice-complete"
-            hidden
-            aria-labelledby="complete-heading"
-        >
-            <h2 id="complete-heading">Session complete</h2>
-            <p>
-                Final score: <strong id="final-score">0</strong> /
-                <strong id="final-answered">0</strong>
-            </p>
-            <p>Accuracy: <strong id="final-accuracy">0%</strong></p>
-            <a id="new-session" class="new-session-button" href="/practice"
-                >New session</a
-            >
-        </section>
-    </main>
+    <h1>Practice</h1>
+    <section id="practice-setup" class="progress-summary"><p>Loading current curriculum…</p></section>
+    <section id="practice-session" hidden>
+      <div class="practice-meta">
+        <p id="question-progress"></p>
+        <p>Score: <strong id="practice-score">0</strong> / <strong id="answered-count">0</strong></p>
+      </div>
+      <section id="practice-question" class="progress-summary"></section>
+      <div id="practice-actions" class="practice-actions" hidden>
+        <button id="next-question" class="new-session-button" type="button">Next question</button>
+      </div>
+    </section>
+    <section id="practice-complete" class="practice-complete" hidden>
+      <h2>Practice complete</h2>
+      <p>Score: <strong id="final-score">0</strong> / <strong id="final-total">0</strong></p>
+      <div class="progress-actions">
+        <button id="practice-again" class="new-session-button" type="button">Practice again</button>
+        <a class="secondary-button" href="/learn">Return to Learn</a>
+        <a class="secondary-button" href="/progress">View progress</a>
+      </div>
+    </section>
+  </main>
 </Layout>
 
 <script>
-    import "../../scripts/practice-client";
+  import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
+  import { getConceptMastery, getTargetConcepts, readPracticeAttempts, savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
+
+  const setup = document.querySelector<HTMLElement>("#practice-setup");
+  const session = document.querySelector<HTMLElement>("#practice-session");
+  const host = document.querySelector<HTMLElement>("#practice-question");
+  const actions = document.querySelector<HTMLElement>("#practice-actions");
+  const next = document.querySelector<HTMLButtonElement>("#next-question");
+  const progress = document.querySelector<HTMLElement>("#question-progress");
+  const scoreNode = document.querySelector<HTMLElement>("#practice-score");
+  const answeredNode = document.querySelector<HTMLElement>("#answered-count");
+  const complete = document.querySelector<HTMLElement>("#practice-complete");
+  const finalScore = document.querySelector<HTMLElement>("#final-score");
+  const finalTotal = document.querySelector<HTMLElement>("#final-total");
+  const again = document.querySelector<HTMLButtonElement>("#practice-again");
+  const stored = readImportedCurriculum();
+  const allQuestions = readImportedQuestions();
+
+  const shuffle = <T,>(items: T[]) => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
+  if (!stored || !setup) {
+    if (setup) setup.innerHTML = `<h2>No current curriculum</h2><p>Import a curriculum to make it the current Practice curriculum.</p><p><a class="new-session-button" href="/import">Import curriculum</a></p>`;
+  } else {
+    const concepts = stored.curriculum.concepts;
+    const conceptLabel = (id: string) => concepts.find((concept) => concept.id === id)?.label ?? id;
+    const attempts = readPracticeAttempts().filter((attempt) => attempt.curriculumId === stored.curriculum.id);
+    const mastery = getConceptMastery(attempts);
+    const masteryByConcept = new Map(mastery.map((item) => [item.concept, item]));
+
+    const title = document.createElement("h2");
+    title.textContent = stored.curriculum.title;
+    const description = document.createElement("p");
+    description.textContent = "Adaptive Practice is the default. It prioritizes concepts that need attention while keeping broader retrieval in the mix.";
+
+    const modeWrap = document.createElement("div");
+    modeWrap.className = "practice-choice-row";
+    const modeLabel = document.createElement("label");
+    modeLabel.htmlFor = "practice-mode";
+    modeLabel.textContent = "Practice mode";
+    const mode = document.createElement("select");
+    mode.id = "practice-mode";
+    mode.innerHTML = `<option value="adaptive">Adaptive practice</option><option value="all">All concepts</option><option value="selected">Choose concepts</option>`;
+    modeWrap.append(modeLabel, mode);
+
+    const conceptBox = document.createElement("fieldset");
+    conceptBox.className = "concept-picker";
+    conceptBox.hidden = true;
+    const legend = document.createElement("legend");
+    legend.textContent = "Concepts";
+    conceptBox.append(legend);
+    concepts.forEach((concept) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = concept.id;
+      const status = masteryByConcept.get(concept.id)?.status;
+      label.append(input, document.createTextNode(` ${concept.label}${status ? ` · ${status}` : ""}`));
+      conceptBox.append(label);
+    });
+
+    const lengthWrap = document.createElement("div");
+    lengthWrap.className = "practice-choice-row";
+    const lengthLabel = document.createElement("label");
+    lengthLabel.htmlFor = "practice-length";
+    lengthLabel.textContent = "Session length";
+    const length = document.createElement("select");
+    length.id = "practice-length";
+    [5, 10, 15].forEach((value) => {
+      const option = document.createElement("option"); option.value = String(value); option.textContent = String(value); length.append(option);
+    });
+    lengthWrap.append(lengthLabel, length);
+
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "new-session-button";
+    start.textContent = "Start practice";
+    const note = document.createElement("p");
+    note.className = "practice-availability";
+    note.textContent = `${allQuestions.length} validated question${allQuestions.length === 1 ? "" : "s"} available for this curriculum.`;
+    setup.replaceChildren(title, description, modeWrap, conceptBox, lengthWrap, start, note);
+
+    mode.addEventListener("change", () => { conceptBox.hidden = mode.value !== "selected"; });
+
+    let questions: typeof allQuestions = [];
+    let current = 0;
+    let score = 0;
+    let answered = false;
+    let sessionId = "";
+    let startedAt = "";
+
+    const questionConcepts = (question: (typeof allQuestions)[number]) => new Set([...(question.concepts ?? []), ...(question.masteryConcept ? [question.masteryConcept] : [])]);
+    const matches = (question: (typeof allQuestions)[number], ids: Set<string>) => [...questionConcepts(question)].some((id) => ids.has(id));
+
+    const chooseQuestions = () => {
+      const requested = Number(length.value);
+      if (mode.value === "all") return shuffle(allQuestions).slice(0, requested);
+      if (mode.value === "selected") {
+        const selected = new Set(Array.from(conceptBox.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => input.value));
+        return shuffle(allQuestions.filter((question) => matches(question, selected))).slice(0, requested);
+      }
+
+      const targets = getTargetConcepts(attempts, Math.max(5, concepts.length)).map((item) => item.concept);
+      const targetIds = new Set(targets);
+      const targeted = shuffle(allQuestions.filter((question) => matches(question, targetIds)));
+      const remaining = shuffle(allQuestions.filter((question) => !matches(question, targetIds)));
+      const targetCount = Math.min(targeted.length, Math.max(1, Math.ceil(requested * 0.7)));
+      return shuffle([...targeted.slice(0, targetCount), ...remaining.slice(0, requested - targetCount)]).slice(0, requested);
+    };
+
+    const finish = () => {
+      session!.hidden = true;
+      complete!.hidden = false;
+      finalScore!.textContent = String(score);
+      finalTotal!.textContent = String(questions.length);
+      saveSessionSummary({ id: sessionId, mode: `Adaptive practice · ${stored.curriculum.title}`, requestedLength: String(questions.length), startedAt, completedAt: new Date().toISOString(), questionCount: questions.length, answeredCount: questions.length, correctCount: score, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title });
+    };
+
+    const renderQuestion = () => {
+      answered = false;
+      actions!.hidden = true;
+      const question = questions[current];
+      progress!.textContent = `Question ${current + 1} of ${questions.length}`;
+      scoreNode!.textContent = String(score);
+      answeredNode!.textContent = String(current);
+      const heading = document.createElement("h2"); heading.textContent = question.prompt;
+      const answers = document.createElement("div"); answers.className = "answers";
+      const review = document.createElement("div"); review.className = "review"; review.hidden = true;
+      shuffle(question.answers).forEach((answer) => {
+        const label = document.createElement("label"); label.className = "answer-option";
+        const input = document.createElement("input"); input.type = "radio"; input.name = `practice-${question.id}`; input.value = answer.id;
+        label.append(input, document.createTextNode(answer.text)); answers.append(label);
+        input.addEventListener("change", () => {
+          if (answered) return; answered = true;
+          if (answer.correct) score += 1;
+          const correct = question.answers.find((item) => item.correct);
+          answers.querySelectorAll<HTMLInputElement>("input").forEach((item) => { item.disabled = true; if (correct && item.value === correct.id) item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct"); });
+          if (!answer.correct) label.dataset.result = "incorrect";
+          const result = document.createElement("p"); result.textContent = answer.correct ? "Correct." : "Not quite."; review.append(result);
+          if (!answer.correct && correct) { const correction = document.createElement("p"); const strong = document.createElement("strong"); strong.textContent = "Correct answer: "; correction.append(strong, document.createTextNode(correct.text)); review.append(correction); }
+          if (question.explanation || answer.feedback) { const explanation = document.createElement("p"); explanation.textContent = question.explanation || answer.feedback; review.append(explanation); }
+          review.hidden = false;
+          savePracticeAttempt({ questionId: question.id, answerId: answer.id, correct: answer.correct, answeredAt: new Date().toISOString(), sessionId, curriculumId: stored.curriculum.id, curriculumTitle: stored.curriculum.title, ...(question.topic && { topic: question.topic }), ...(question.concepts?.length && { concepts: question.concepts }), ...(question.masteryConcept && { masteryConcept: question.masteryConcept }), ...(question.difficulty && { difficulty: question.difficulty }), ...(question.learningStage && { learningStage: question.learningStage }) });
+          scoreNode!.textContent = String(score); answeredNode!.textContent = String(current + 1); actions!.hidden = false; next!.textContent = current === questions.length - 1 ? "See results" : "Next question";
+        });
+      });
+      host!.replaceChildren(heading, answers, review);
+    };
+
+    const begin = () => {
+      questions = chooseQuestions();
+      if (!questions.length) { note.textContent = mode.value === "selected" ? "Choose at least one concept with available questions." : "No questions are available for this practice selection yet."; return; }
+      current = 0; score = 0; sessionId = crypto.randomUUID(); startedAt = new Date().toISOString(); setup.hidden = true; complete!.hidden = true; session!.hidden = false; renderQuestion();
+    };
+
+    start.addEventListener("click", begin);
+    again?.addEventListener("click", () => { complete!.hidden = true; setup.hidden = false; });
+    next?.addEventListener("click", () => { if (!answered) return; if (current === questions.length - 1) finish(); else { current += 1; renderQuestion(); } });
+  }
 </script>
+
+<style>
+.practice-hub{padding-bottom:4rem}.practice-choice-row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin:1rem 0}.practice-choice-row label{font-weight:700}.practice-choice-row select{min-width:12rem}.concept-picker{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem;margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:.75rem}.concept-picker legend{font-weight:700;padding:0 .35rem}.concept-picker label{display:block}.practice-availability{color:var(--text-muted);margin-top:1rem}.answer-option{display:flex;gap:.75rem;align-items:flex-start;padding:.85rem;margin:.65rem 0;border:1px solid var(--border);border-radius:.65rem}.answer-option[data-result="correct"]{border-color:var(--success,#5fa46a)}.answer-option[data-result="incorrect"]{border-color:var(--danger,#b85c5c)}.review{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+</style>
