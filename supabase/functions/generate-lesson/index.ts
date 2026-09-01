@@ -41,29 +41,25 @@ const lessonSchema = {
         type: "object",
         additionalProperties: false,
         required: ["heading", "body"],
-        properties: {
-          heading: { type: "string" },
-          body: { type: "string" },
-        },
+        properties: { heading: { type: "string" }, body: { type: "string" } },
       },
     },
-    distinctions: {
-      type: "array",
-      minItems: 1,
-      maxItems: 5,
-      items: { type: "string" },
-    },
+    distinctions: { type: "array", minItems: 1, maxItems: 5, items: { type: "string" } },
     keyTerms: {
       type: "array",
-      maxItems: 10,
+      minItems: 3,
+      maxItems: 8,
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["term", "expansion", "definition"],
+        required: ["term", "expansion", "definition", "whyItMatters", "emphasisTerms", "priority"],
         properties: {
           term: { type: "string" },
           expansion: { type: "string" },
           definition: { type: "string" },
+          whyItMatters: { type: "string" },
+          emphasisTerms: { type: "array", maxItems: 3, items: { type: "string" } },
+          priority: { type: "string", enum: ["high", "medium"] },
         },
       },
     },
@@ -104,11 +100,7 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ message: "OPENAI_API_KEY is not configured on the server." }, 500);
 
   let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return json({ message: "Invalid JSON request." }, 400);
-  }
+  try { body = await req.json(); } catch { return json({ message: "Invalid JSON request." }, 400); }
 
   const curriculumTitle = typeof body?.curriculumTitle === "string" ? body.curriculumTitle.trim() : "";
   const sectionTitle = typeof body?.sectionTitle === "string" ? body.sectionTitle.trim() : "";
@@ -116,41 +108,37 @@ Deno.serve(async (req) => {
   const objectivesText = typeof body?.objectivesText === "string" ? body.objectivesText.trim() : "";
   const neighboringContext = typeof body?.neighboringContext === "string" ? body.neighboringContext.trim() : "";
 
-  if (!curriculumTitle || !sectionTitle || !sourceText) {
-    return json({ message: "Curriculum title, section title, and source text are required." }, 400);
-  }
-  if (sourceText.length > MAX_SOURCE_CHARS || objectivesText.length > MAX_CONTEXT_CHARS || neighboringContext.length > MAX_CONTEXT_CHARS) {
-    return json({ message: "Lesson source material is too large for this prototype." }, 413);
-  }
+  if (!curriculumTitle || !sectionTitle || !sourceText) return json({ message: "Curriculum title, section title, and source text are required." }, 400);
+  if (sourceText.length > MAX_SOURCE_CHARS || objectivesText.length > MAX_CONTEXT_CHARS || neighboringContext.length > MAX_CONTEXT_CHARS) return json({ message: "Lesson source material is too large for this prototype." }, 413);
 
   const systemPrompt = `You transform bounded curriculum evidence into one concise learner-facing mini-lesson. You are not writing an assessment and you are not summarizing curriculum-production metadata. Use ONLY the supplied source text, objectives, and neighboring context for factual claims. Never add outside facts, even if you know them. If the evidence is insufficient for a useful explanation, state the limitation in sourceNote and keep the lesson narrow rather than filling gaps.
 
 The lesson should take roughly 3-6 minutes to read. Preserve useful source wording where it is already clear, but reorganize or explain when the source is reference-like or outline-like. Explain WHY distinctions matter, not just definitions. If the source uses clues or constraints such as Linux, shared, persistent, block, file, workload, cost, or performance, explain the relationship only when supported by the supplied evidence.
 
-Key terms are for hover/tap definitions. Include an initialism expansion only if the supplied evidence explicitly supports that expansion. Never infer or manufacture an expansion from general knowledge. Definitions must also be source-grounded. The memoryHook should be a compact conceptual distinction, not a gimmicky mnemonic. Create one easy two-option retrieval check that reinforces the lesson; it does not establish mastery. Exactly one option must be correct.
+Choose 3-8 keyTerms for inline hover/tap help. This is a CURATED GLOSSARY, not an extraction of every noun or every capitalized token. Prefer: technical terms a learner is likely to misunderstand; initialisms worth knowing; phrases whose technical meaning is narrower than ordinary English; and concepts whose distinction is important in this lesson. Do NOT select broad ordinary words such as storage, compute, service, server, cost, or performance unless that ordinary word itself has a specific technical meaning that must be distinguished here. Those ordinary words may still appear inside definitions or whyItMatters explanations for more specific terms such as EBS, EFS, AMI, or instance type.
+
+For each keyTerm:
+- term is the exact learner-facing word or phrase to decorate.
+- expansion is included only when supplied evidence explicitly supports it; otherwise use an empty string.
+- definition is a concise source-grounded meaning.
+- whyItMatters explains the useful distinction or relationship in THIS lesson. It should add value beyond repeating the definition.
+- emphasisTerms contains 0-3 short words/phrases already present in the definition or whyItMatters that deserve visual emphasis because they anchor the concept (for example block storage, shared file storage, boot image). Do not add facts merely to create emphasis.
+- priority is high for terms central to understanding this lesson and medium for useful supporting terms.
+
+Avoid weak hover text such as “EC2 — initialism” or definitions that merely rename the term. If the supplied evidence cannot support a useful definition, omit the term from keyTerms instead of filling it with a weak label. Definitions should distinguish nearby concepts when the evidence supports that distinction. The memoryHook should be a compact conceptual distinction, not a gimmicky mnemonic. Create one easy two-option retrieval check that reinforces the lesson; it does not establish mastery. Exactly one option must be correct.
 
 Do not mention blind tests, question generation, curation rules, provenance procedures, or other curriculum-building mechanics in the learner-facing lesson unless they are themselves the subject matter.`;
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MODEL,
       input: [
         { role: "system", content: systemPrompt },
         { role: "user", content: JSON.stringify({ curriculumTitle, sectionTitle, sourceText, objectivesText, neighboringContext }) },
       ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "generated_lesson",
-          strict: true,
-          schema: lessonSchema,
-        },
-      },
+      text: { format: { type: "json_schema", name: "generated_lesson", strict: true, schema: lessonSchema } },
     }),
   });
 
