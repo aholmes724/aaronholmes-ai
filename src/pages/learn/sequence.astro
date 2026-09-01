@@ -22,8 +22,8 @@ import Layout from "../../layouts/Layout.astro";
     <section id="queue-actions" class="queue-actions" hidden>
       <p id="queue-summary"></p>
       <div id="history-buttons" class="queue-buttons history-buttons">
-        <button id="previous-generated" class="secondary-button" type="button" hidden>← Previous generated</button>
-        <button id="next-generated" class="secondary-button" type="button" hidden>Next generated →</button>
+        <button id="previous-generated" class="secondary-button" type="button" hidden>← Previous lessons</button>
+        <button id="next-generated" class="secondary-button" type="button" hidden>Next lessons →</button>
       </div>
       <div class="queue-buttons">
         <button id="generate-next" class="new-session-button" type="button">Generate next lesson →</button>
@@ -88,6 +88,10 @@ import Layout from "../../layouts/Layout.astro";
 
     const generatedCount = () => { let count = 0; for (const group of groups) { if (!getCachedLesson(group)) break; count += 1; } return count; };
     const goTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+    const lessonRangeLabel = (start: number, amount: number, count: number) => {
+      const end = Math.min(start + amount, count);
+      return end <= start + 1 ? `Lesson ${start + 1}` : `Lessons ${start + 1}–${end}`;
+    };
 
     const renderLesson = (group: LessonGroup, lesson: GeneratedLesson, index: number) => {
       const article = document.createElement("article"); article.className = "sequence-card generated-sequence-card";
@@ -112,8 +116,20 @@ import Layout from "../../layouts/Layout.astro";
         const visibleEnd = Math.min(visibleStart + visibleAmount, count);
         const rangeLabel = visibleAmount === 1 || visibleEnd === visibleStart + 1 ? `lesson ${visibleStart + 1}` : `lessons ${visibleStart + 1}–${visibleEnd}`;
         queueSummary.textContent = remaining > 0 ? `Showing ${rangeLabel}. ${count} of ${groups.length} generated; ${remaining} remaining.` : `Showing ${rangeLabel}. All ${groups.length} lessons generated.`;
-        if (previousGeneratedButton) previousGeneratedButton.hidden = visibleStart === 0;
-        if (nextGeneratedButton) nextGeneratedButton.hidden = visibleEnd >= count;
+        if (previousGeneratedButton) {
+          previousGeneratedButton.hidden = visibleStart === 0;
+          if (!previousGeneratedButton.hidden) {
+            const step = Math.max(1, visibleAmount);
+            const previousStart = Math.max(0, visibleStart - step);
+            previousGeneratedButton.textContent = `← ${lessonRangeLabel(previousStart, Math.min(step, visibleStart - previousStart), count)}`;
+          }
+        }
+        if (nextGeneratedButton) {
+          nextGeneratedButton.hidden = visibleEnd >= count;
+          if (!nextGeneratedButton.hidden) {
+            nextGeneratedButton.textContent = `${lessonRangeLabel(visibleEnd, Math.min(Math.max(1, visibleAmount), count - visibleEnd), count)} →`;
+          }
+        }
         if (nextButton) nextButton.hidden = remaining === 0;
         if (nextThreeButton) nextThreeButton.hidden = remaining === 0;
       }
