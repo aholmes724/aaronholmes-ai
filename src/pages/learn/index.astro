@@ -7,6 +7,7 @@ import Layout from "../../layouts/Layout.astro";
         <div class="practice-links"><a href="/import">Import curriculum</a><a href="/practice">Practice</a><a href="/progress">Progress</a></div>
         <h1>Learn</h1>
         <section id="learn-intro" class="progress-summary"><p>Loading your saved curriculum…</p></section>
+        <section id="readiness-summary" class="readiness-summary" hidden></section>
         <nav id="concept-nav" class="concept-nav" aria-label="Curriculum topics"></nav>
         <div id="lesson-host" class="curriculum-lessons"></div>
     </main>
@@ -14,11 +15,12 @@ import Layout from "../../layouts/Layout.astro";
 
 <script>
     import { readImportedCurriculum } from "../../data/curriculum/storage";
+    import { buildLearnSections, type LearnSection, type InstructionalReadiness } from "../../data/curriculum/learn-content";
 
-    type SourceSection = { heading: string; text: string };
     type Initialism = { term: string; expansion?: string };
 
     const intro = document.querySelector<HTMLElement>("#learn-intro");
+    const readinessSummary = document.querySelector<HTMLElement>("#readiness-summary");
     const nav = document.querySelector<HTMLElement>("#concept-nav");
     const host = document.querySelector<HTMLElement>("#lesson-host");
     const stored = readImportedCurriculum();
@@ -40,23 +42,6 @@ import Layout from "../../layouts/Layout.astro";
         .replace(/\n{3,}/g, "\n\n")
         .trim();
 
-    const splitSections = (text: string, fallbackTitle: string): SourceSection[] => {
-        const sections: SourceSection[] = [];
-        let heading = fallbackTitle;
-        let body: string[] = [];
-        const flush = () => {
-            const sectionText = cleanText(body.join("\n"));
-            if (sectionText) sections.push({ heading, text: sectionText });
-            body = [];
-        };
-        text.replace(/\r\n/g, "\n").split("\n").forEach((line) => {
-            const match = line.match(/^#{1,6}\s+(.+?)\s*$/);
-            if (match) { flush(); heading = cleanText(match[1]); } else body.push(line);
-        });
-        flush();
-        return sections;
-    };
-
     const extractInitialisms = (text: string): Initialism[] => {
         const found = new Map<string, string | undefined>();
         const expansionPatterns = [
@@ -71,19 +56,14 @@ import Layout from "../../layouts/Layout.astro";
                 found.set(term, expansion);
             }
         }
-
-        // Highlight initialisms even when this source never spells out their expansion.
-        // We do not invent an expansion; later transformed lessons can provide a grounded glossary.
         for (const match of text.matchAll(/\b[A-Z][A-Z0-9-]{1,9}\b/g)) {
-            const term = match[0];
-            if (!found.has(term)) found.set(term, undefined);
+            if (!found.has(match[0])) found.set(match[0], undefined);
         }
-
         return [...found].map(([term, expansion]) => ({ term, expansion }));
     };
 
     const sentences = (text: string): string[] => {
-        const normalized = text.replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
+        const normalized = cleanText(text).replace(/\n+/g, " ").replace(/\s+/g, " ").trim();
         if (!normalized) return [];
         if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
             const SegmenterCtor = (Intl as any).Segmenter;
@@ -104,13 +84,10 @@ import Layout from "../../layouts/Layout.astro";
             const index = match.index ?? 0;
             if (index > cursor) parent.append(document.createTextNode(text.slice(cursor, index)));
             const abbr = document.createElement("abbr");
-            abbr.className = "initialism-help learn-initialism";
-            abbr.tabIndex = 0;
-            abbr.textContent = match[0];
+            abbr.className = "initialism-help learn-initialism"; abbr.tabIndex = 0; abbr.textContent = match[0];
             const expansion = lookup.get(match[0]);
             const tooltip = expansion ? `${match[0]} — ${expansion}` : `${match[0]} — initialism`;
-            abbr.title = tooltip;
-            abbr.dataset.tooltip = tooltip;
+            abbr.title = tooltip; abbr.dataset.tooltip = tooltip;
             abbr.setAttribute("aria-label", expansion ? `${match[0]}: ${expansion}` : `${match[0]}, initialism`);
             parent.append(abbr); cursor = index + match[0].length;
         }
@@ -144,28 +121,43 @@ import Layout from "../../layouts/Layout.astro";
             const node = sentenceNodes[index++]; activeSentence = node; node.classList.add("is-reading");
             node.scrollIntoView({ block: "nearest", behavior: "smooth" });
             const utterance = new SpeechSynthesisUtterance(speechText(node.textContent ?? "", terms));
-            utterance.rate = 0.95;
-            utterance.onend = speakNext;
-            utterance.onerror = stopSpeech;
+            utterance.rate = 0.95; utterance.onend = speakNext; utterance.onerror = stopSpeech;
             activeUtterance = utterance; window.speechSynthesis.speak(utterance);
         };
         speakNext();
     };
 
-    const renderLesson = (section: SourceSection, index: number, terms: Initialism[]) => {
-        const article = document.createElement("article"); article.className = "curriculum-lesson"; article.id = `topic-${index + 1}`;
+    const readinessLabels: Record<InstructionalReadiness, string> = {
+        preserve: "Preserve",
+        augment: "Lightly augment",
+        transform: "Transform into lesson",
+        insufficient: "Needs more source material",
+    };
+
+    const renderLesson = (section: LearnSection, index: number, terms: Initialism[]) => {
+        const article = document.createElement("article"); article.className = "curriculum-lesson"; article.id = section.id;
         const header = document.createElement("div"); header.className = "lesson-heading";
-        const heading = document.createElement("h2"); appendInitialisms(heading, section.heading, terms);
+        const headingWrap = document.createElement("div");
+        const heading = document.createElement("h2"); appendInitialisms(heading, section.title, terms);
+        const badge = document.createElement("span"); badge.className = `readiness-badge readiness-${section.decision.readiness}`;
+        badge.textContent = readinessLabels[section.decision.readiness];
+        headingWrap.append(heading, badge);
         const audio = document.createElement("button"); audio.type = "button"; audio.className = "secondary-button lesson-audio"; audio.textContent = "Listen";
-        header.append(heading, audio);
+        header.append(headingWrap, audio);
+
+        const decision = document.createElement("details"); decision.className = "readiness-detail";
+        const decisionTitle = document.createElement("summary"); decisionTitle.textContent = `Why: ${section.decision.reason}`;
+        const signals = document.createElement("p"); signals.textContent = `Signals: ${section.decision.signals.join(" · ")} · confidence: ${section.decision.confidence}`;
+        decision.append(decisionTitle, signals);
+
         const body = document.createElement("div"); body.className = "lesson-reading";
         const sentenceNodes: HTMLElement[] = [];
-        sentences(section.text).forEach((sentence) => {
+        sentences(section.sourceText).forEach((sentence) => {
             const span = document.createElement("span"); span.className = "read-along-sentence";
             appendInitialisms(span, sentence, terms); body.append(span, document.createTextNode(" ")); sentenceNodes.push(span);
         });
         audio.addEventListener("click", () => speakLesson(audio, sentenceNodes, terms));
-        article.append(header, body); return article;
+        article.append(header, decision, body); return article;
     };
 
     window.addEventListener("beforeunload", stopSpeech);
@@ -174,30 +166,41 @@ import Layout from "../../layouts/Layout.astro";
         if (intro) intro.innerHTML = `<h2>No curriculum saved</h2><p>Import source material first, then it will become your Learn content.</p><p><a class="new-session-button" href="/import">Import curriculum</a></p>`;
     } else {
         const sourceText = stored.sourceText?.trim() ?? "";
-        let sections = sourceText ? splitSections(sourceText, stored.curriculum.title) : [];
-        if (!sections.length) {
-            sections = stored.curriculum.concepts.map((concept) => ({ heading: concept.label, text: concept.description ?? "" })).filter((section) => section.text.trim());
-        }
+        const sections = sourceText
+            ? buildLearnSections(stored.curriculum, sourceText)
+            : stored.curriculum.concepts.filter((concept) => concept.description?.trim()).map((concept, index) => ({
+                id: `learn-${index + 1}`,
+                title: concept.label,
+                sourceText: concept.description ?? "",
+                conceptId: concept.id,
+                decision: buildLearnSections(stored.curriculum, concept.description ?? "")[0]?.decision ?? {
+                    readiness: "insufficient" as const, confidence: "high" as const, reason: "No usable source text was saved for this concept.", signals: [],
+                },
+            }));
         const evidenceText = stored.curriculum.questionDrafts.map((draft) => draft.sourceEvidence?.excerpt ?? "").join("\n");
-        const allVisibleText = `${sourceText}\n${evidenceText}\n${sections.map((section) => `${section.heading}\n${section.text}`).join("\n")}`;
-        const terms = extractInitialisms(allVisibleText);
+        const terms = extractInitialisms(`${sourceText}\n${evidenceText}\n${sections.map((section) => `${section.title}\n${section.sourceText}`).join("\n")}`);
+
         intro.replaceChildren();
         const title = document.createElement("h2"); title.textContent = stored.curriculum.title;
-        const summary = document.createElement("p");
-        summary.textContent = `${sections.length} study topic${sections.length === 1 ? "" : "s"}. Listen reads each topic aloud and highlights the sentence being spoken.`;
+        const summary = document.createElement("p"); summary.textContent = `${sections.length} source section${sections.length === 1 ? "" : "s"}. This prototype now evaluates whether each section should be preserved, lightly augmented, transformed into a lesson, or declined for insufficient evidence.`;
         intro.append(title, summary);
         if (!sourceText) {
             const warning = document.createElement("p"); warning.className = "learn-source-note";
-            warning.textContent = "This curriculum was saved before full source-text learning was added, so these lessons use the shorter saved concept summaries. Re-import the original source once to unlock the complete lessons.";
+            warning.textContent = "This saved curriculum does not include the original full source text. Re-importing the original source will give the readiness classifier better evidence.";
             intro.append(warning);
         }
         if (terms.length) {
-            const note = document.createElement("p"); note.className = "initialism-note";
-            note.textContent = "Highlighted initialisms reveal their expansion on hover, tap, or keyboard focus when the source states it.";
-            intro.append(note);
+            const note = document.createElement("p"); note.className = "initialism-note"; note.textContent = "Highlighted initialisms reveal their expansion on hover, tap, or keyboard focus when the source states it."; intro.append(note);
         }
+
+        if (readinessSummary) {
+            const counts = sections.reduce<Record<InstructionalReadiness, number>>((acc, section) => { acc[section.decision.readiness] += 1; return acc; }, { preserve: 0, augment: 0, transform: 0, insufficient: 0 });
+            readinessSummary.hidden = false;
+            readinessSummary.innerHTML = `<strong>Readiness preview</strong><span>${counts.preserve} preserve</span><span>${counts.augment} augment</span><span>${counts.transform} transform</span><span>${counts.insufficient} insufficient</span>`;
+        }
+
         sections.forEach((section, index) => {
-            const link = document.createElement("a"); link.href = `#topic-${index + 1}`; link.textContent = section.heading; nav.append(link);
+            const link = document.createElement("a"); link.href = `#${section.id}`; link.textContent = `${index + 1}. ${section.title}`; nav.append(link);
             host.append(renderLesson(section, index, terms));
         });
     }
@@ -205,30 +208,29 @@ import Layout from "../../layouts/Layout.astro";
 
 <style>
     .learn-shell { padding-bottom: 4rem; }
+    .readiness-summary { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; margin: 1rem 0; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
+    .readiness-summary span { padding: .25rem .5rem; border-radius: 999px; background: var(--surface-alt); font-size: .86rem; }
     .concept-nav { display: flex; gap: .6rem; overflow-x: auto; padding: 1rem 0; margin: .5rem 0 1rem; scrollbar-width: thin; }
     .concept-nav a { flex: 0 0 auto; padding: .45rem .7rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); text-decoration: none; font-size: .9rem; }
     .concept-nav a:hover { border-color: var(--accent); }
     .curriculum-lessons { display: grid; gap: 1rem; max-width: var(--reading-width); }
     .curriculum-lesson { padding: 1.1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); scroll-margin-top: 1rem; }
-    .lesson-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
-    .lesson-heading h2 { margin: 0; font-size: 1.2rem; }
+    .lesson-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .6rem; }
+    .lesson-heading h2 { margin: 0 0 .4rem; font-size: 1.2rem; }
     .lesson-audio { flex: 0 0 auto; padding: .45rem .7rem; }
+    .readiness-badge { display: inline-block; padding: .2rem .48rem; border: 1px solid var(--border); border-radius: 999px; font-size: .75rem; font-weight: 650; }
+    .readiness-preserve { background: color-mix(in srgb, #35a854 14%, transparent); }
+    .readiness-augment { background: color-mix(in srgb, #4b8ed8 14%, transparent); }
+    .readiness-transform { background: color-mix(in srgb, #d39a31 16%, transparent); }
+    .readiness-insufficient { background: color-mix(in srgb, #c94d4d 14%, transparent); }
+    .readiness-detail { margin: 0 0 .8rem; padding: .55rem .7rem; border-left: 2px solid var(--border); font-size: .82rem; color: var(--muted); }
+    .readiness-detail summary { cursor: pointer; }
+    .readiness-detail p { margin: .45rem 0 0; }
     .lesson-reading { line-height: 1.85; }
     .read-along-sentence { border-radius: .2rem; transition: background .15s ease, box-shadow .15s ease; }
     .read-along-sentence.is-reading { background: var(--surface-alt); box-shadow: 0 0 0 .18rem var(--surface-alt); }
     .learn-source-note { padding: .75rem; border-left: 3px solid var(--accent); background: var(--surface-alt); }
-    :global(.learn-initialism) {
-        padding: 0 .12em;
-        border-radius: .22rem;
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        font-weight: 650;
-        text-decoration: underline dotted;
-        text-decoration-thickness: 1px;
-        text-underline-offset: .2em;
-    }
-    :global(.learn-initialism:hover),
-    :global(.learn-initialism:focus) {
-        background: color-mix(in srgb, var(--accent) 24%, transparent);
-    }
+    :global(.learn-initialism) { padding: 0 .12em; border-radius: .22rem; background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 650; text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: .2em; }
+    :global(.learn-initialism:hover), :global(.learn-initialism:focus) { background: color-mix(in srgb, var(--accent) 24%, transparent); }
     @media (max-width: 520px) { .lesson-heading { align-items: flex-start; } .lesson-heading h2 { font-size: 1.1rem; } }
 </style>
