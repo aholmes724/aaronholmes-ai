@@ -3,31 +3,106 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout
-  title="Aaron Holmes | Business Systems & Automation"
-  description="Business systems automation, CRM architecture, API integrations, workflow design, and technical consulting."
+  title="Aaron Holmes | Business Systems, Automation & Integrations"
+  description="Business systems and automation specialist focused on internal tooling, SaaS integrations, REST APIs, workflow automation, technical implementation, and AI-enabled operations."
 >
   <main>
     <section class="hero container">
       <p class="eyebrow">
-        Business Systems · Automation · Integrations · Technical Consulting
+        Business Systems · Internal Tooling · Automation · Integrations
       </p>
 
-      <h1>
-        I make complicated business systems easier to understand, automate, and
-        maintain.
-      </h1>
+      <h1>I turn real business processes into reliable systems.</h1>
 
       <p class="intro">
-        I work across business process automation, CRM systems, APIs, integrations,
-        and operational workflows. I learn how a business actually works, identify
-        bottlenecks and failure points, and translate those requirements into
-        systems that are more reliable, maintainable, and easier for teams to use.
+        I build and improve business systems, internal tooling, automations, and
+        integrations that connect people, processes, data, and SaaS platforms.
+        My work spans process discovery, workflow automation, CRM architecture,
+        REST APIs and webhooks, technical implementation, production
+        troubleshooting, data quality, documentation, training, and AI-assisted
+        workflows.
       </p>
 
       <div class="hero-links">
-        <a class="primary-link" href="#experience">Experience</a>
-        <a href="#projects">Selected work</a>
-        <a href="#skills">Skills</a>
+        <a class="primary-link" href="#projects">Selected work</a>
+        <a href="/Aaron_Holmes_Resume.pdf" download>Download résumé</a>
+        <a href="#experience">Experience</a>
+        <a href="#skills">Technical toolkit</a>
+      </div>
+    </section>
+
+    <section id="projects" class="section container">
+      <p class="section-label">Selected technical work</p>
+
+      <div class="project-grid">
+        <article class="project-card">
+          <p class="project-kicker">Production automation architecture</p>
+          <h2>Scaling & Stabilizing a High-Volume Automation Environment</h2>
+          <p>
+            Reverse-engineered an inherited ecosystem of CRM workflows, custom
+            functions, Zapier automations, APIs, document services, and telecom
+            integrations. Identified repeated logic, unnecessary lookups, hidden
+            dependencies, and failure points while improving logging,
+            documentation, and maintainability.
+          </p>
+          <p class="project-tech">
+            Zapier · Zoho CRM · Zoho Flow · Deluge · APIs · Production Support
+          </p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">Workflow architecture</p>
+          <h2>Duplicate Processing Redesign</h2>
+          <p>
+            Replaced fragmented duplicate logic with a centralized decision
+            process covering normalized matching, stage and product rules,
+            ownership and supplier behavior, exceptions, and a 30-day duplicate
+            window. Audited roughly 300 recent records after rollout.
+          </p>
+          <p class="project-tech">
+            Zoho CRM · Deluge · Workflow Design · Data Quality · Automation
+          </p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">API integration</p>
+          <h2>Healthcare Eligibility Integration</h2>
+          <p>
+            Built a custom multi-endpoint REST API integration for insurance
+            eligibility workflows, including authentication and token management,
+            request and response handling, payer and patient normalization, data
+            mapping, CRM updates, and failure handling.
+          </p>
+          <p class="project-tech">
+            REST APIs · Authentication · JSON · Data Mapping · Zapier · CRM
+          </p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">Systems implementation</p>
+          <h2>New Product-Line Systems Implementation</h2>
+          <p>
+            Led systems implementation for a new compression-garment product line,
+            translating operational requirements into coordinated changes across intake,
+            CRM workflows, product and supplier logic, document generation, and downstream
+            fulfillment. Tested the end-to-end process, resolved rollout issues, and
+            supported the transition into production.
+          </p>
+          <p class="project-tech">
+            Requirements Analysis · Process Mapping · CRM · Workflow Automation ·
+            Document Automation · Testing & Validation
+          </p>
+        </article>
+      </div>
+
+      <div class="additional-work">
+        <h2>Additional work</h2>
+        <p>
+          Other projects include healthcare CRM and intake automation for Ask Your
+          Primary, workflow and enterprise support for the TixWork B2B SaaS
+          platform, securities-lending intake and data-enrichment automation, and
+          automated content-ingestion and classification systems for TheRedZone.org.
+        </p>
       </div>
     </section>
 
@@ -41,60 +116,54 @@ import Layout from "../layouts/Layout.astro";
             <p class="role-company">Lincoln Health Supply</p>
           </div>
 
-          <p class="role-meta">Healthcare · DME · Remote · 2025–Present</p>
+          <p class="role-meta">Healthcare · DME/HME · Remote · 2025–2026</p>
         </div>
 
         <p class="role-summary">
-          Owned and modernized a large healthcare automation environment spanning
-          hundreds of Zapier workflows plus Zoho CRM, Zoho One applications,
-          Deluge, REST APIs, webhooks, document workflows, and external services.
-          Worked independently with direct access to business leadership,
-          translating operational requirements into maintainable technical systems.
+          Owned and modernized a large production business-systems environment
+          supporting patient intake, insurance eligibility, prescriptions, medical
+          records, documents, orders, fulfillment, and customer communications.
+          Worked directly with operations leadership to translate real business
+          requirements into reliable CRM workflows, integrations, automation, data
+          controls, and internal tooling.
         </p>
 
         <ul class="experience-list">
           <li>
-            Managed and reverse-engineered a complex production environment with
-            hundreds of workflows, workflow rules, and custom functions supporting
-            patient intake, eligibility, prescriptions, documents, orders, and
-            follow-up processes.
+            Reverse-engineered and supported a large inherited production
+            environment spanning 400+ CRM workflows, roughly 150 custom functions,
+            ~15 Zoho Flows, and hundreds of Zapier automations. Analyzed an
+            environment processing approximately 500,000 Zapier tasks per month to
+            identify failure points, redundant lookups, repeated logic, and
+            opportunities to improve reliability and maintainability.
           </li>
 
           <li>
-            Designed a centralized duplicate-processing system to replace
-            scattered duplicate logic, improving consistency, auditability, and
-            control over ownership, supplier assignment, and request creation.
+            Designed and deployed a centralized duplicate-processing system with
+            normalized email/DOB matching, product and stage rules, ownership and
+            supplier handling, exceptions, and a 30-day duplicate window. Audited
+            and remediated roughly 300 recent records after rollout.
           </li>
 
           <li>
-            Built a custom Zapier integration for pVerify eligibility workflows,
-            including authentication, token handling, request formatting, and
-            normalization of payer and patient data.
+            Built a custom multi-endpoint pVerify REST API integration handling
+            authentication and token management, requests and responses, payer and
+            patient normalization, data mapping, and CRM updates for healthcare
+            eligibility workflows.
           </li>
 
           <li>
-            Built and troubleshot prescription and document fax automation across
-            Zoho, document-generation tools, PDF processing, cloud storage, and
-            telecom integrations where standard connector behavior was
-            insufficient.
+            Led systems implementation for a new compression-garment product line,
+            translating operational requirements into changes across intake, CRM,
+            document generation, supplier routing, and downstream fulfillment
+            workflows; tested the process and resolved rollout issues.
           </li>
 
           <li>
-            Led the systems work required to introduce compression garments as a
-            new product line, integrating the new workflow into existing intake,
-            CRM, request, supplier, and fulfillment processes.
-          </li>
-
-          <li>
-            Prioritized explicit logging, traceability, and documentation so
-            automation behavior could be understood by operations leadership,
-            future technical staff, and outside stakeholders rather than relying
-            on undocumented institutional knowledge.
-          </li>
-
-          <li>
-            Trained another employee on Zapier and Zoho workflows and began
-            transferring system knowledge out of a one-person technical function.
+            Improved the supportability of inherited systems through logging,
+            failure alerts, traceability, SOPs, and technical documentation;
+            supported AI-assisted extraction from inbound medical documentation and
+            trained another employee to maintain the environment independently.
           </li>
         </ul>
       </div>
@@ -110,100 +179,41 @@ import Layout from "../layouts/Layout.astro";
         </div>
 
         <p class="role-summary">
-          Deliver business systems, workflow automation, integrations, and web
-          solutions across financial services, healthcare, SaaS, media, real
-          estate, and small-business environments. The work has evolved from web
-          development into increasingly complex automation, data, and systems
-          consulting.
+          Deliver business systems, automation, integration, data, and web solutions
+          across healthcare, financial services, B2B SaaS, media, real estate, and
+          small-business environments. Work directly with clients and users to
+          understand operational problems, identify the real requirements behind a
+          request, design practical solutions, troubleshoot production issues, and
+          explain technical decisions in clear business language.
         </p>
 
         <ul class="experience-list">
           <li>
+            Support integrations, workflow automation, enterprise operations, and
+            sales support for TixWork, a B2B operations SaaS platform deployed
+            across 100+ restaurant locations.
+          </li>
+
+          <li>
+            Designed healthcare CRM and integration workflows for Ask Your Primary,
+            including QR-based pharmacy intake, patient-data mapping, and
+            fax-to-record automation connecting intake data with downstream
+            operational systems.
+          </li>
+
+          <li>
             Built lead-intake, market-data enrichment, prospecting, and
             document-generation workflows for international securities-backed
             lending, combining borrower and ticker data with market history,
-            financial metrics, and LTV scenarios to support evaluation of
-            high-value opportunities.
+            financial metrics, and business rules.
           </li>
 
           <li>
-            Designed and prototyped healthcare CRM and integration workflows for
-            Ask Your Primary, including pharmacy-specific QR intake, patient-data
-            mapping, and fax-to-record integration. That engagement led directly
-            to work with Lincoln Health Supply.
-          </li>
-
-          <li>
-            Developed automated content-ingestion and rules-based classification
-            workflows for TheRedZone.org and resolved recurring production
-            performance issues caused by excessive caching.
-          </li>
-
-          <li>
-            Provide project-based integration and workflow automation support for
-            TixWork, a multi-unit operations SaaS platform used across 100+
-            restaurant locations, with additional contributions to sales and
-            enterprise customer support as needed.
+            Developed automated content-ingestion and classification workflows and
+            diagnosed recurring production application-performance problems for
+            digital publishing projects.
           </li>
         </ul>
-      </div>
-    </section>
-
-    <section id="projects" class="section container">
-      <p class="section-label">Selected technical work</p>
-
-      <div class="project-grid">
-        <article class="project-card">
-          <p class="project-kicker">Automation architecture</p>
-          <h2>Duplicate Processing Redesign</h2>
-          <p>
-            Consolidated duplicate-handling rules into a more centralized,
-            auditable process designed to prevent workflow conflicts and preserve
-            intended owner, supplier, and request behavior.
-          </p>
-          <p class="project-tech">
-            Zoho CRM · Deluge · Zapier · Workflow Design
-          </p>
-        </article>
-
-        <article class="project-card">
-          <p class="project-kicker">API integration</p>
-          <h2>pVerify Eligibility Integration</h2>
-          <p>
-            Built a custom Zapier integration for healthcare eligibility checks,
-            including authentication, bearer-token handling, API requests, data
-            normalization, and CRM workflow integration.
-          </p>
-          <p class="project-tech">
-            REST APIs · Authentication · Zapier Developer Platform · JSON
-          </p>
-        </article>
-
-        <article class="project-card">
-          <p class="project-kicker">Financial services automation</p>
-          <h2>Securities-Lending Workflow Automation</h2>
-          <p>
-            Built intake, data-enrichment, prospecting, and document-generation
-            workflows for international securities-backed lending using borrower
-            data, ticker history, financial metrics, and LTV scenarios.
-          </p>
-          <p class="project-tech">
-            Data Enrichment · Document Automation · WordPress · Workflow Design
-          </p>
-        </article>
-
-        <article class="project-card">
-          <p class="project-kicker">Content automation</p>
-          <h2>TheRedZone.org</h2>
-          <p>
-            Developed automated article-ingestion and rules-based classification
-            workflows for an NFL news platform and resolved recurring performance
-            issues related to large caching requirements.
-          </p>
-          <p class="project-tech">
-            Content Ingestion · Rules-Based Classification · Production Troubleshooting
-          </p>
-        </article>
       </div>
     </section>
 
@@ -212,37 +222,54 @@ import Layout from "../layouts/Layout.astro";
 
       <div class="skills-grid">
         <div>
-          <h2>Automation & CRM</h2>
+          <h2>Business Systems & Automation</h2>
           <p>
-            Zapier, Zoho CRM, Zoho One, workflow architecture, conditional logic,
-            data mapping, debugging, run-history analysis, process documentation
+            Internal Tooling · Systems Analysis · Business Process Automation ·
+            Workflow Automation · Workflow Orchestration · Technical Implementation ·
+            Requirements Analysis & Discovery · Process Mapping · Solution Design ·
+            Production Support
           </p>
         </div>
 
         <div>
-          <h2>APIs & Integrations</h2>
+          <h2>APIs & Integration</h2>
           <p>
-            REST APIs, webhooks, JSON, OAuth concepts, bearer tokens, API keys,
-            authentication flows, request/response troubleshooting, custom
-            integrations
+            REST APIs · Webhooks · JSON · API Authentication · Bearer Tokens · Data
+            Mapping · Data Normalization · Request/Response Troubleshooting ·
+            Third-Party Integrations
           </p>
         </div>
 
         <div>
-          <h2>Development & Cloud</h2>
+          <h2>Platforms & Tools</h2>
           <p>
-            Deluge, JavaScript, Python fundamentals, SQL fundamentals, Astro, Git,
-            GitHub, VS Code, Cloudflare Pages, AWS EC2, cloud compute, storage
-            configuration, and Linux environments
+            Zapier · Zoho CRM / Zoho One · Zoho Flow · Deluge · pVerify · Telnyx /
+            Phaxio · Google Workspace · Document & PDF Automation
           </p>
         </div>
 
         <div>
-          <h2>Business Systems</h2>
+          <h2>Operations & Reliability</h2>
           <p>
-            Requirements discovery, process mapping, CRM architecture, systems
-            integration, production troubleshooting, technical training,
-            stakeholder communication, and documentation
+            Root-Cause Analysis · Data Quality · Deduplication · Logging · Failure
+            Alerts · Traceability · Technical Documentation · SOPs · User Training &
+            Enablement · Tool/Vendor Evaluation
+          </p>
+        </div>
+
+        <div>
+          <h2>AI-Enabled Workflows</h2>
+          <p>
+            AI-Assisted Automation · OpenAI-Assisted Data Extraction · Structured
+            Information Extraction · Human-in-the-Loop Workflow Design
+          </p>
+        </div>
+
+        <div class="building-card">
+          <h2>Currently Building</h2>
+          <p>
+            n8n · Python · SQL · JavaScript · Git / GitHub · AWS · AI Agents & Tool
+            Calling
           </p>
         </div>
       </div>
@@ -251,26 +278,56 @@ import Layout from "../layouts/Layout.astro";
     <section class="section container">
       <p class="section-label">How I work</p>
 
-      <h2>Learn the business first. Automate the right problem second.</h2>
+      <h2>Understand the process before automating it.</h2>
 
       <p>
-        I enjoy learning how different businesses and teams operate. Cross-industry
-        experience helps me anticipate bottlenecks, identify conflicting
-        assumptions, and ask focused questions without disrupting the people doing
-        the work. That discovery process is what allows me to design integrations
-        and automation around the real workflow rather than an idealized version of
-        it.
+        Automation works best when it reflects how a business actually operates,
+        not just how the process looks on paper.
+      </p>
+
+      <p>
+        I start by learning the people, systems, data, exceptions, workarounds, and
+        constraints behind a workflow. Then I look for the simplest reliable
+        solution: configuration, automation, integration, internal tooling, a
+        reusable function, or sometimes a process change instead of more software.
+      </p>
+
+      <p>
+        I care about what happens after launch too: failure handling, logging,
+        documentation, supportability, user adoption, and whether someone other
+        than the original builder can understand the system six months later.
+      </p>
+    </section>
+
+    <section class="section container">
+      <p class="section-label">Where I fit</p>
+
+      <h2>Business operations and technology, connected.</h2>
+
+      <p>
+        I’m interested in remote roles at the intersection of business operations
+        and technology, including Business Systems, Internal Tooling, Automation,
+        Systems Integration, Technical Implementation, Solutions Engineering, and
+        Technical Customer Success.
+      </p>
+
+      <p>
+        I’m particularly interested in teams using APIs, SaaS platforms, workflow
+        automation, and AI to solve operational problems where strong technical
+        communication matters as much as the tooling itself.
       </p>
     </section>
 
     <section class="section container contact-section">
       <p class="section-label">Contact</p>
 
-      <h2>Interested in automation, integrations, or systems work?</h2>
+      <h2>Have a complicated systems problem? Let’s talk.</h2>
 
       <p>
-        I am most interested in remote roles where technical problem-solving,
-        communication, and business-process understanding overlap.
+        I’m interested in remote opportunities involving business systems,
+        automation, integrations, implementation, and technical customer work, as
+        well as consulting projects where a messy process needs to become a
+        maintainable system.
       </p>
 
       <div class="contact-links">
@@ -305,7 +362,7 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .intro {
-    max-width: 760px;
+    max-width: 800px;
     margin: 2rem 0 0;
     color: var(--text-muted);
     font-size: clamp(1.1rem, 2vw, 1.35rem);
@@ -420,6 +477,25 @@ import Layout from "../layouts/Layout.astro";
     margin-bottom: 0;
     font-size: 0.9rem;
     font-weight: 600;
+  }
+
+  .additional-work {
+    max-width: 850px;
+    margin-top: 2rem;
+    padding-top: 1rem;
+  }
+
+  .additional-work h2 {
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+  }
+
+  .additional-work p {
+    color: var(--text-muted);
+  }
+
+  .building-card {
+    border-style: dashed !important;
   }
 
   .contact-section {
