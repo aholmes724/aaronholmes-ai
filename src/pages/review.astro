@@ -1,0 +1,363 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Question Review | Aaron Holmes">
+    <main class="container">
+        <div class="practice-links">
+            <a href="/progress">← Back to Progress</a>
+            <a href="/practice">Practice</a>
+        </div>
+
+        <h1>Question review</h1>
+        <p>Review learner flags, spot recurring quality problems, and turn them into guidance for future question generation.</p>
+
+        <section class="progress-summary" aria-labelledby="feedback-summary-heading">
+            <h2 id="feedback-summary-heading">Feedback summary</h2>
+            <dl id="feedback-summary" class="progress-stats"></dl>
+        </section>
+
+        <section class="progress-summary" aria-labelledby="shared-feedback-heading">
+            <h2 id="shared-feedback-heading">Shared feedback</h2>
+            <div id="shared-feedback-summary">
+                <p>Checking shared feedback store…</p>
+            </div>
+        </section>
+
+        <section aria-labelledby="shared-signals-heading">
+            <h2 id="shared-signals-heading">Shared review signals</h2>
+            <p>
+                Exact question versions stay separate for auditability. Two independent browsers puts a version on watch; three or more makes it a review priority.
+            </p>
+            <div id="shared-review-signals" class="progress-list">
+                <p>No question versions have crossed a shared review threshold.</p>
+            </div>
+        </section>
+
+        <section aria-labelledby="semantic-signals-heading">
+            <h2 id="semantic-signals-heading">Cross-question patterns</h2>
+            <p>
+                Related question variants can share a semantic grouping without being treated as the same question. This is a lightweight bridge to future embedding/vector clustering.
+            </p>
+            <div id="semantic-review-signals" class="progress-list">
+                <p>No cross-question semantic pattern has enough evidence yet.</p>
+            </div>
+        </section>
+
+        <section aria-labelledby="guidance-heading">
+            <h2 id="guidance-heading">Generation guidance</h2>
+            <p>This is a deterministic summary of the feedback collected on this browser. It is intended to become input to future question-generation and review prompts.</p>
+            <div id="generation-guidance" class="progress-summary"><p>No question feedback yet.</p></div>
+        </section>
+
+        <section aria-labelledby="rewrite-heading">
+            <h2 id="rewrite-heading">Needs rewrite</h2>
+            <div id="rewrite-queue" class="progress-list"><p>No questions waiting for rewrite.</p></div>
+        </section>
+
+        <section aria-labelledby="queue-heading">
+            <h2 id="queue-heading">Open review queue</h2>
+            <div id="review-queue" class="progress-list"><p>No open flagged questions.</p></div>
+        </section>
+    </main>
+</Layout>
+
+<script>
+    import { allQuestions } from "../data/questions";
+    import {
+        QUESTION_FEEDBACK_REASONS,
+        getFeedbackReasonLabel,
+        getQuestionVersionKey,
+        readQuestionFeedback,
+        readQuestionReviewStates,
+        setQuestionReviewStatus,
+        type QuestionFeedback,
+        type QuestionFeedbackReason,
+        type QuestionReviewStatus,
+    } from "../data/question-feedback";
+    import {
+        isSharedFeedbackConfigured,
+        readSharedFeedbackSummary,
+    } from "../data/shared-feedback";
+
+    const questionById = new Map(allQuestions.map((question) => [question.id, question]));
+
+    const reviewStatusLabels: Record<QuestionReviewStatus, string> = {
+        open: "Open",
+        "needs-rewrite": "Needs rewrite",
+        reviewed: "Reviewed",
+        retired: "Retired",
+    };
+
+    const guidanceByReason: Record<QuestionFeedbackReason, string> = {
+        "wording-gives-away-answer": "Avoid distractors whose wording exposes them as wrong. Use absolute qualifiers such as always, never, only, every, and guaranteed sparingly and only when technically necessary.",
+        "distractors-unrealistic": "Prefer plausible distractors that reflect realistic misconceptions or near-miss reasoning an informed learner might actually choose.",
+        "answer-too-obvious": "Make the learner distinguish between credible alternatives rather than identifying the single nuanced or professionally worded answer.",
+        "possibly-incorrect": "Verify the keyed answer and explanation against the source before approval; do not use uncertain questions for mastery decisions until reviewed.",
+        "explanation-unclear": "Write explanations that state why the correct answer fits and why the tempting alternatives do not, without merely repeating the answer text.",
+        other: "Review free-text notes for additional recurring quality patterns before generating the next batch.",
+    };
+
+    const createReasonList = (
+        reasonCounts: Map<QuestionFeedbackReason | "bare", number>,
+    ) => {
+        const list = document.createElement("ul");
+        Array.from(reasonCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([reason, count]) => {
+                const line = document.createElement("li");
+                line.textContent = `${reason === "bare" ? "Bare flag" : getFeedbackReasonLabel(reason)}: ${count}`;
+                list.append(line);
+            });
+        return list;
+    };
+
+    const createReviewCard = (
+        questionId: string,
+        questionVersion: number,
+        items: QuestionFeedback[],
+        currentStatus: QuestionReviewStatus,
+        rerender: () => void,
+    ) => {
+        const question = questionById.get(questionId);
+        const card = document.createElement("article");
+        card.className = "progress-summary question-review-card";
+
+        const title = document.createElement("h3");
+        title.textContent = question?.prompt ?? questionId;
+
+        const meta = document.createElement("p");
+        meta.className = "question-review-meta";
+        meta.textContent = `v${questionVersion} · ${items.length} flag${items.length === 1 ? "" : "s"} · ${question?.topic ?? items[0]?.topic ?? "unknown topic"}`;
+
+        const reasons = document.createElement("ul");
+        items.forEach((item) => {
+            const line = document.createElement("li");
+            const note = item.note ? ` — ${item.note}` : "";
+            line.textContent = item.reason ? `${getFeedbackReasonLabel(item.reason)}${note}` : `Bare flag${note}`;
+            reasons.append(line);
+        });
+
+        const controls = document.createElement("div");
+        controls.className = "progress-actions";
+        const label = document.createElement("label");
+        label.textContent = "Review status ";
+        const select = document.createElement("select");
+        select.className = "question-review-status";
+
+        (Object.keys(reviewStatusLabels) as QuestionReviewStatus[]).forEach((status) => {
+            const option = document.createElement("option");
+            option.value = status;
+            option.textContent = reviewStatusLabels[status];
+            option.selected = status === currentStatus;
+            select.append(option);
+        });
+
+        select.addEventListener("change", () => {
+            setQuestionReviewStatus(
+                questionId,
+                select.value as QuestionReviewStatus,
+                questionVersion,
+            );
+            rerender();
+        });
+
+        label.append(select);
+        controls.append(label);
+        card.append(title, meta, reasons, controls);
+        return card;
+    };
+
+    const render = () => {
+        const feedback = readQuestionFeedback();
+        const reviewStates = new Map(
+            readQuestionReviewStates().map((state) => [
+                getQuestionVersionKey(state.questionId, state.questionVersion),
+                state.status,
+            ]),
+        );
+        const reasonCounts = new Map<QuestionFeedbackReason, number>();
+        QUESTION_FEEDBACK_REASONS.forEach((reason) => reasonCounts.set(reason, 0));
+        feedback.forEach((item) => {
+            if (item.reason) reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
+        });
+        const bareFlagCount = feedback.filter((item) => !item.reason).length;
+
+        const summary = document.querySelector<HTMLElement>("#feedback-summary");
+        if (summary) {
+            if (!feedback.length) {
+                summary.innerHTML = "<div><dt>Total flags</dt><dd>0</dd></div>";
+            } else {
+                const uniqueQuestionVersionKeys = new Set(
+                    feedback.map((item) => getQuestionVersionKey(item.questionId, item.questionVersion)),
+                );
+                const needsRewriteCount = [...uniqueQuestionVersionKeys].filter((key) => reviewStates.get(key) === "needs-rewrite").length;
+                const retiredCount = [...uniqueQuestionVersionKeys].filter((key) => reviewStates.get(key) === "retired").length;
+                const reasonEntries = Array.from(reasonCounts.entries()).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+                const entries: string[][] = [
+                    ["Total flags", feedback.length.toString()],
+                    ["Needs rewrite", needsRewriteCount.toString()],
+                    ["Retired", retiredCount.toString()],
+                ];
+                if (bareFlagCount > 0) entries.push(["Bare flags", bareFlagCount.toString()]);
+                entries.push(...reasonEntries.slice(0, 2).map(([reason, count]) => [getFeedbackReasonLabel(reason), count.toString()]));
+                summary.replaceChildren(...entries.map(([labelText, valueText]) => {
+                    const wrapper = document.createElement("div");
+                    const label = document.createElement("dt");
+                    const value = document.createElement("dd");
+                    label.textContent = labelText;
+                    value.textContent = valueText;
+                    wrapper.append(label, value);
+                    return wrapper;
+                }));
+            }
+        }
+
+        const guidance = document.querySelector<HTMLElement>("#generation-guidance");
+        if (guidance) {
+            const rankedReasons = Array.from(reasonCounts.entries()).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
+            if (!rankedReasons.length) {
+                guidance.innerHTML = bareFlagCount
+                    ? `<p>${bareFlagCount} bare flag${bareFlagCount === 1 ? "" : "s"} indicate question${bareFlagCount === 1 ? "" : "s"} that need review, but there is not enough categorized feedback yet to infer a generation rule.</p>`
+                    : "<p>No question feedback yet.</p>";
+            } else {
+                const heading = document.createElement("strong");
+                heading.textContent = "Current quality guidance";
+                const list = document.createElement("ul");
+                rankedReasons.slice(0, 4).forEach(([reason, count]) => {
+                    const item = document.createElement("li");
+                    item.textContent = `${guidanceByReason[reason]} (${count} flag${count === 1 ? "" : "s"})`;
+                    list.append(item);
+                });
+                guidance.replaceChildren(heading, list);
+            }
+        }
+
+        const groups = new Map<string, QuestionFeedback[]>();
+        feedback.forEach((item) => {
+            const key = getQuestionVersionKey(item.questionId, item.questionVersion);
+            const items = groups.get(key) ?? [];
+            items.push(item);
+            groups.set(key, items);
+        });
+        const sortedGroups = Array.from(groups.entries()).sort(([, a], [, b]) =>
+            Math.max(...b.map((item) => new Date(item.createdAt).getTime())) - Math.max(...a.map((item) => new Date(item.createdAt).getTime()))
+        );
+
+        const rewriteQueue = document.querySelector<HTMLElement>("#rewrite-queue");
+        const reviewQueue = document.querySelector<HTMLElement>("#review-queue");
+        const rewriteCards = sortedGroups
+            .filter(([key]) => reviewStates.get(key) === "needs-rewrite")
+            .map(([, items]) => createReviewCard(items[0].questionId, items[0].questionVersion, items, "needs-rewrite", render));
+        const openCards = sortedGroups
+            .filter(([key]) => (reviewStates.get(key) ?? "open") === "open")
+            .map(([, items]) => createReviewCard(items[0].questionId, items[0].questionVersion, items, "open", render));
+
+        if (rewriteQueue) {
+            rewriteCards.length ? rewriteQueue.replaceChildren(...rewriteCards) : rewriteQueue.innerHTML = "<p>No questions waiting for rewrite.</p>";
+        }
+        if (reviewQueue) {
+            openCards.length ? reviewQueue.replaceChildren(...openCards) : reviewQueue.innerHTML = "<p>No open flagged questions.</p>";
+        }
+    };
+
+    const renderSharedFeedback = async () => {
+        const container = document.querySelector<HTMLElement>("#shared-feedback-summary");
+        const signals = document.querySelector<HTMLElement>("#shared-review-signals");
+        const semanticSignals = document.querySelector<HTMLElement>("#semantic-review-signals");
+        if (!container) return;
+
+        if (!isSharedFeedbackConfigured()) {
+            container.innerHTML = "<p>Shared feedback is not configured yet. Local review continues to work normally.</p>";
+            if (signals) signals.innerHTML = "<p>Shared review thresholds require a configured shared feedback store.</p>";
+            if (semanticSignals) semanticSignals.innerHTML = "<p>Cross-question patterns require a configured shared feedback store.</p>";
+            return;
+        }
+
+        const summary = await readSharedFeedbackSummary();
+        if (!summary) {
+            container.innerHTML = "<p>Shared feedback is configured, but the aggregate store could not be read.</p>";
+            if (signals) signals.innerHTML = "<p>Shared review signals could not be loaded.</p>";
+            if (semanticSignals) semanticSignals.innerHTML = "<p>Cross-question patterns could not be loaded.</p>";
+            return;
+        }
+
+        const stats = document.createElement("dl");
+        stats.className = "progress-stats";
+        const entries = [
+            ["Shared flags", summary.totalFlags.toString()],
+            ["Flagged question versions", summary.uniqueQuestions.toString()],
+            ["Independent browsers", summary.uniqueClients.toString()],
+            ["Semantic groups", summary.uniqueSemanticGroups.toString()],
+            ["Bare flags", (summary.reasonCounts.get("bare") ?? 0).toString()],
+        ];
+
+        entries.forEach(([labelText, valueText]) => {
+            const wrapper = document.createElement("div");
+            const label = document.createElement("dt");
+            const value = document.createElement("dd");
+            label.textContent = labelText;
+            value.textContent = valueText;
+            wrapper.append(label, value);
+            stats.append(wrapper);
+        });
+
+        container.replaceChildren(stats);
+
+        if (signals) {
+            const elevated = summary.questions.filter((question) => question.priority !== "normal");
+            if (!elevated.length) {
+                signals.innerHTML = "<p>No question versions have crossed a shared review threshold.</p>";
+            } else {
+                const cards = elevated.map((shared) => {
+                    const question = questionById.get(shared.questionId);
+                    const card = document.createElement("article");
+                    card.className = "progress-summary question-review-card";
+
+                    const title = document.createElement("h3");
+                    title.textContent = question?.prompt ?? shared.questionId;
+
+                    const meta = document.createElement("p");
+                    meta.className = "question-review-meta";
+                    const priorityLabel = shared.priority === "review" ? "Review priority" : "Watch";
+                    meta.textContent = `${priorityLabel} · v${shared.questionVersion} · ${shared.uniqueClients} independent browsers · ${shared.totalFlags} shared flag${shared.totalFlags === 1 ? "" : "s"}`;
+
+                    card.append(title, meta, createReasonList(shared.reasonCounts));
+                    return card;
+                });
+
+                signals.replaceChildren(...cards);
+            }
+        }
+
+        if (!semanticSignals) return;
+        const semanticElevated = summary.semanticGroups.filter(
+            (group) => group.questionVersions > 1 && group.priority !== "normal",
+        );
+        if (!semanticElevated.length) {
+            semanticSignals.innerHTML = "<p>No cross-question semantic pattern has enough evidence yet.</p>";
+            return;
+        }
+
+        const semanticCards = semanticElevated.map((group) => {
+            const card = document.createElement("article");
+            card.className = "progress-summary question-review-card";
+
+            const title = document.createElement("h3");
+            title.textContent = "Related question variants";
+
+            const meta = document.createElement("p");
+            meta.className = "question-review-meta";
+            const priorityLabel = group.priority === "review" ? "Review priority" : "Watch";
+            meta.textContent = `${priorityLabel} · ${group.questionVersions} question versions · ${group.uniqueClients} independent browsers · ${group.totalFlags} shared flags`;
+
+            card.append(title, meta, createReasonList(group.reasonCounts));
+            return card;
+        });
+
+        semanticSignals.replaceChildren(...semanticCards);
+    };
+
+    render();
+    void renderSharedFeedback();
+</script>
