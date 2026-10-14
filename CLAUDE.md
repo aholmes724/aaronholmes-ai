@@ -28,3 +28,7 @@ Consult these guides before working on related tasks:
 - Concept IDs must stay stable once used, since Weak Concepts accuracy tracking and future learning-resource mappings key off the exact string.
 - Reuse an existing concept ID for the same idea across domains instead of creating a near-duplicate (e.g. don't add `pagination-api` if `pagination` already covers it).
 - Practice-mode selection rules live in `src/data/practice-modes.ts` (`MODE_FILTERS`) as the single source of truth; do not duplicate mode-filtering logic elsewhere.
+
+## Portfolio homepage context
+
+Before updating public career or portfolio copy, read `docs/portfolio-context.md` and follow its role-attribution, formatting, claim and resume synchronization rules. Do not overwrite established approved content with generic summaries.
