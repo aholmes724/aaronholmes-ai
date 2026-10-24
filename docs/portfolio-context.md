@@ -26,6 +26,7 @@ Overlapping consulting engagements are intentional. Do not present all as consec
 - Preserve Astro learning and practice routes, dark/light themes, mobile accessibility and current site identity.
 - Preferred sections: hero, selected project evidence, TixWork and other professional experience, substantive skills, practical working approach, clear contact.
 - Correct public LinkedIn URL: https://www.linkedin.com/in/aaronholmesdev/
-- Before merging any website refresh, replace the old public/Aaron_Holmes_Resume.pdf with the approved current one-page resume. The homepage uses that URL.
+- The approved Primary résumé is the two-page PDF at `public/Aaron_Holmes_Resume.pdf`. Keep it unchanged unless a new approved version is provided. The homepage's full résumé link must point directly to `/Aaron_Holmes_Resume.pdf`; `/resume` is a shorter web summary, not a substitute.
+- Employment dates displayed on the homepage and web summary must use the Primary résumé's date wording: TixWork `Current`; Lincoln Health Supply `Sep 2025–Aug 2026`; AviKaiDo `Jan 2019–Sept 2025`; Ascend Internet Marketing `Nov 2015–Dec 2018`.
 - Check markup and run npm ci and npm run build where possible before release.
 - Proposed changes should go through a reviewable branch or pull request rather than an unreviewed live change.

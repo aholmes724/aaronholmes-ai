@@ -3,14 +3,16 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout
-  title="Aaron Holmes | Resume"
-  description="Resume for Aaron Holmes, technical implementation and business systems professional."
+  title="Aaron Holmes | Résumé Summary"
+  description="Concise web résumé summary for Aaron Holmes. View the complete Primary résumé in PDF format."
 >
   <main class="resume-page">
     <nav class="resume-actions" aria-label="Resume actions">
       <a href="/">← Back to portfolio</a>
-      <button id="print-resume" type="button">Print or save as PDF</button>
+      <a href="/Aaron_Holmes_Resume.pdf" target="_blank" rel="noopener noreferrer">View full résumé (PDF)</a>
     </nav>
+
+    <p class="resume-summary-note">This page is a shorter web summary. The <a href="/Aaron_Holmes_Resume.pdf">full two-page Primary résumé</a> includes additional experience and skills.</p>
 
     <article class="resume-paper">
       <header class="resume-header">
@@ -36,7 +38,7 @@ import Layout from "../layouts/Layout.astro";
       <section>
         <h2>Professional Experience</h2>
         <div class="resume-role">
-          <div class="resume-role-header"><h3>TixWork <span>— SaaS Implementation, Product and Customer Support</span></h3><p>Current · Via Ascend</p></div>
+          <div class="resume-role-header"><h3>TixWork <span>— SaaS Implementation, Product and Customer Support</span></h3><p>Current</p></div>
           <ul>
             <li>Support onboarding, troubleshooting, maintenance, and customer communications for an operations SaaS platform used across 100+ restaurant locations.</li>
             <li>Serve as the team’s restaurant-operations subject-matter expert in customer demos, sales conversations, and product discussions; bridge real-world operating needs and technical decisions.</li>
@@ -46,7 +48,7 @@ import Layout from "../layouts/Layout.astro";
         </div>
 
         <div class="resume-role">
-          <div class="resume-role-header"><h3>Lincoln Health Supply <span>— Business Systems Automation Engineer</span></h3><p>Sep 2025 – Aug 2026</p></div>
+          <div class="resume-role-header"><h3>Lincoln Health Supply <span>— Business Systems Automation Engineer</span></h3><p>Sep 2025–Aug 2026 · Remote</p></div>
           <ul>
             <li>Took primary hands-on technical responsibility for a largely undocumented healthcare automation environment spanning 400+ Zoho CRM workflows, approximately 150 existing Deluge functions, approximately 15 Zoho Flows, and hundreds of Zapier automations.</li>
             <li>Built a custom multi-endpoint pVerify REST integration with bearer-token authentication, request and response logic, patient and payer normalization, CRM mappings, and production troubleshooting.</li>
@@ -57,7 +59,7 @@ import Layout from "../layouts/Layout.astro";
         </div>
 
         <div class="resume-role">
-          <div class="resume-role-header"><h3>AviKaiDo <span>— Business Systems and Automation Consultant</span></h3><p>Jan 2019 – Sep 2025 · Projects</p></div>
+          <div class="resume-role-header"><h3>AviKaiDo <span>— Business Systems and Automation Consultant</span></h3><p>Jan 2019–Sept 2025</p></div>
           <ul>
             <li>Built websites, data-driven automations, integrations, and client workflows across healthcare, financial services, publishing, and small businesses; handled discovery through troubleshooting.</li>
             <li>Created securities-backed lending sites and automations for High West Capital Partners, Global Stock Lenders, and International Liquidity Partners, using borrower and ticker data, market history, LTV rules, and deal documents.</li>
@@ -66,7 +68,7 @@ import Layout from "../layouts/Layout.astro";
         </div>
 
         <div class="resume-role">
-          <div class="resume-role-header"><h3>Ascend Internet Marketing <span>— Web Development, CRM and Client Delivery</span></h3><p>Nov 2015 – Dec 2018 · Projects</p></div>
+          <div class="resume-role-header"><h3>Ascend Internet Marketing <span>— Web Development, CRM and Client Delivery</span></h3><p>Nov 2015–Dec 2018</p></div>
           <ul>
             <li>Delivered website and CRM-related projects for clients including Schafer Development and Cure Launcher, spanning buildout, support, troubleshooting, and client communication.</li>
             <li>Worked on JK&amp;T Wings’ custom maintenance-tracking system, the original client solution that later evolved into the TixWork SaaS product.</li>
@@ -84,14 +86,15 @@ import Layout from "../layouts/Layout.astro";
   </main>
 </Layout>
 
-<script>
-  document.querySelector("#print-resume")?.addEventListener("click", () => window.print());
-</script>
-
 <style>
   .resume-page {
     width: min(100% - 2rem, 960px);
     margin: 2rem auto 5rem;
+  }
+  .resume-summary-note {
+    margin: 0.4rem 0 1.5rem;
+    color: var(--text-muted);
+    font-size: 0.95rem;
   }
   .resume-actions {
     display: flex;
