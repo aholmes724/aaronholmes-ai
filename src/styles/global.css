@@ -130,6 +130,20 @@ img {
   border-color: var(--accent);
 }
 
+.theme-toggle {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+}
+
 @media (max-width: 380px) {
   .site-header-inner {
     gap: 0.5rem;
@@ -154,19 +168,6 @@ img {
   }
 }
 
-.theme-toggle {
-  padding: 0.4rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.theme-toggle:hover {
-  border-color: var(--accent);
-}
 
 
 .answers {
