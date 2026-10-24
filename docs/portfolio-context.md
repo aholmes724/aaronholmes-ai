@@ -1,6 +1,6 @@
 # Portfolio content and context
 
-Updated October 14, 2026. Read this before changing the professional portfolio homepage.
+Updated October 24, 2026. Read this before changing the professional portfolio homepage.
 
 ## Goal
 The site is a credible, competitive public portfolio for business systems engineering, SaaS implementation, integrations, automation, technical customer support and solutions engineering. It should show substantive real-world project work and communication with nontechnical stakeholders. It is not exclusively a coding portfolio or a training log.
@@ -8,8 +8,8 @@ The site is a credible, competitive public portfolio for business systems engine
 ## Experience order and attribution
 1. **TixWork**: standalone current project-based engagement through Ascend. Customer onboarding, maintenance, troubleshooting, demonstrations, restaurant operations subject-matter expertise, and influence on product improvements from customer feedback. The platform serves 100+ locations; this is a *product footprint*, not a personal rollout count.
 2. **Lincoln Health Supply**: Business Systems Automation Engineer, September 2025 through August 2026. Supported a large inherited environment; do not claim to have personally built all 400+ CRM workflows or ~150 existing functions. Key firsthand accomplishments include the multi-endpoint pVerify REST integration, centralized duplicate processing and roughly 300 audited records, implementation of compression garment workflows, differences in three locations' intake paths, troubleshooting, documentation, and training.
-3. **AviKaiDo**: project-based consulting, November 2019 to Present. Clients include High West Capital Partners, Global Stock Lenders and International Liquidity Partners for securities-backed lending data/document automation; Ask Your Primary pharmacy CRM/intake prototype; TheRedZone content ingestion and classification.
-4. **Ascend Internet Marketing**: November 2015 to Present, project-based; earlier and ongoing client work including Schafer Development, Cure Launcher and JK&T Wings. The custom maintenance-tracking tool for JK&T Wings evolved into the broader TixWork product. Do not treat it as a separate unrelated current product.
+3. **AviKaiDo**: project-based consulting, January 2019 through September 2025. Clients include High West Capital Partners, Global Stock Lenders and International Liquidity Partners for securities-backed lending data/document automation; Ask Your Primary pharmacy CRM/intake prototype; TheRedZone content ingestion and classification.
+4. **Ascend Internet Marketing**: November 2015 through December 2018, project-based; client work including Schafer Development, Cure Launcher and JK&T Wings. The custom maintenance-tracking tool for JK&T Wings evolved into the broader TixWork product. Do not treat it as a separate unrelated current product.
 
 Overlapping consulting engagements are intentional. Do not present all as consecutive full-time positions.
 
