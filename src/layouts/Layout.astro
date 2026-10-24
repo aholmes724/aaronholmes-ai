@@ -35,15 +35,25 @@ const {
       <div class="site-header-inner">
         <a class="site-brand" href="/">Aaron Holmes</a>
 
-        <button
-          class="theme-toggle"
-          id="theme-toggle"
-          type="button"
-          aria-pressed="false"
-          title="Toggle color theme"
-        >
-          <span class="theme-toggle-label">Dark mode</span>
-        </button>
+        <div class="site-header-actions">
+          <a
+            class="header-resume-link"
+            href="/Aaron_Holmes_Resume.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View the full two-page résumé (PDF)"
+          >Résumé</a>
+
+          <button
+            class="theme-toggle"
+            id="theme-toggle"
+            type="button"
+            aria-pressed="false"
+            title="Toggle color theme"
+          >
+            <span class="theme-toggle-label">Dark mode</span>
+          </button>
+        </div>
       </div>
     </header>
     <slot />
