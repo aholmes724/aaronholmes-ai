@@ -1,0 +1,606 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout title="Imported Curriculum Practice | Aaron Holmes">
+    <main class="container">
+        <div class="practice-links">
+            <a href="/import">← Import curriculum</a>
+            <a href="/curriculum-review">Review or edit questions</a>
+            <a href="/practice">Main practice</a>
+            <a href="/progress">View progress</a>
+        </div>
+        <h1>Imported curriculum practice</h1>
+        <div class="progress-actions">
+            <button id="export-questions-md" class="secondary-button" type="button">Export questions (.md)</button>
+            <button id="export-questions-json" class="secondary-button" type="button">Export questions (.json)</button>
+        </div>
+        <section id="curriculum-info" class="progress-summary"><p>Loading saved curriculum…</p></section>
+        <section id="runtime-question" class="progress-summary"></section>
+        <div id="runtime-actions" class="practice-actions" hidden>
+            <button id="runtime-next" class="new-session-button" type="button">Next question</button>
+        </div>
+        <section id="runtime-complete" class="practice-complete" hidden>
+            <h2>Session complete</h2>
+            <p>Final score: <strong id="runtime-score">0</strong> / <strong id="runtime-total">0</strong></p>
+            <div class="progress-actions">
+                <a class="new-session-button" href="/practice/imported">New session</a>
+                <a class="secondary-button" href="/curriculum-review">Review or edit questions</a>
+                <a class="secondary-button" href="/progress">View progress</a>
+            </div>
+        </section>
+    </main>
+</Layout>
+
+<script>
+    import { readImportedCurriculum, readImportedQuestions } from "../../data/curriculum/storage";
+    import { savePracticeAttempt, saveSessionSummary } from "../../data/attempts";
+    import {
+        generateLearningReview,
+        isLearningReviewConfigured,
+        type LearningReview,
+        type LearningReviewTerm,
+    } from "../../data/curriculum/learning-review-client";
+    import {
+        removeQuestionFeedback,
+        saveQuestionFeedback,
+        QUESTION_FEEDBACK_REASONS,
+        type QuestionFeedback,
+        type QuestionFeedbackReason,
+    } from "../../data/question-feedback";
+    import { syncQuestionFeedback, unsyncQuestionFeedback } from "../../data/shared-feedback";
+
+    const info = document.querySelector<HTMLElement>("#curriculum-info");
+    const host = document.querySelector<HTMLElement>("#runtime-question");
+    const actions = document.querySelector<HTMLElement>("#runtime-actions");
+    const next = document.querySelector<HTMLButtonElement>("#runtime-next");
+    const complete = document.querySelector<HTMLElement>("#runtime-complete");
+    const finalScore = document.querySelector<HTMLElement>("#runtime-score");
+    const finalTotal = document.querySelector<HTMLElement>("#runtime-total");
+    const exportMarkdown = document.querySelector<HTMLButtonElement>("#export-questions-md");
+    const exportJson = document.querySelector<HTMLButtonElement>("#export-questions-json");
+
+    const shuffle = <T,>(items: T[]): T[] => {
+        const copy = [...items];
+        for (let index = copy.length - 1; index > 0; index -= 1) {
+            const swapIndex = Math.floor(Math.random() * (index + 1));
+            [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+        }
+        return copy;
+    };
+
+    const slugify = (value: string) => value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "curriculum";
+
+    const downloadText = (filename: string, content: string, type: string) => {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const stored = readImportedCurriculum();
+    const questions = readImportedQuestions().map((question) => ({
+        ...question,
+        answers: question.shuffleAnswers === false
+            ? question.answers
+            : shuffle(question.answers),
+    }));
+    const sessionId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
+    const learningReviewCache = new Map<string, LearningReview>();
+    let current = 0;
+    let score = 0;
+    let answered = false;
+
+    exportMarkdown?.addEventListener("click", () => {
+        if (!stored) return;
+        const drafts = stored.curriculum.questionDrafts;
+        const lines: string[] = [
+            `# ${stored.curriculum.title}`,
+            "",
+            `${drafts.length} generated/reviewable questions`,
+            "",
+        ];
+
+        drafts.forEach((draft, index) => {
+            const meta = [
+                draft.validationStatus,
+                draft.authorship,
+                draft.learningStage,
+                draft.difficulty,
+                draft.generation?.harnessVersion ? `Harness ${draft.generation.harnessVersion}` : undefined,
+            ].filter(Boolean).join(" · ");
+            lines.push(`## ${index + 1}. ${draft.prompt}`, "", meta, "");
+            draft.answers.forEach((answer) => {
+                lines.push(`- ${answer.correct ? "**✓ " : ""}${answer.text}${answer.correct ? "**" : ""}`);
+            });
+            lines.push("", `**Explanation:** ${draft.explanation}`, "");
+            if (draft.qualityWarnings?.length) {
+                lines.push("**Quality warnings:**");
+                draft.qualityWarnings.forEach((warning) => lines.push(`- ${warning.message}`));
+                lines.push("");
+            }
+            if (draft.sourceEvidence?.excerpt) {
+                lines.push(
+                    "**Source evidence**",
+                    "",
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    "",
+                    `> ${draft.sourceEvidence.excerpt.replace(/\n/g, "\n> ")}`,
+                    "",
+                );
+            }
+        });
+
+        downloadText(
+            `${slugify(stored.curriculum.title)}-questions.md`,
+            lines.join("\n"),
+            "text/markdown;charset=utf-8",
+        );
+    });
+
+    exportJson?.addEventListener("click", () => {
+        if (!stored) return;
+        downloadText(
+            `${slugify(stored.curriculum.title)}-questions.json`,
+            JSON.stringify(stored.curriculum, null, 2),
+            "application/json;charset=utf-8",
+        );
+    });
+
+    const setInfo = (titleText: string, bodyText: string) => {
+        if (!info) return;
+        const title = document.createElement("h2");
+        title.textContent = titleText;
+        const body = document.createElement("p");
+        body.textContent = bodyText;
+        info.replaceChildren(title, body);
+    };
+
+    const formatReason = (reason: QuestionFeedbackReason) =>
+        reason.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
+
+    const getDraft = (questionId: string) =>
+        stored?.curriculum.questionDrafts.find((item) => item.id === questionId);
+
+    const getConceptLabel = (question: (typeof questions)[number]) => {
+        const draft = getDraft(question.id);
+        const conceptId = draft?.masteryConcept || question.masteryConcept;
+        return stored?.curriculum.concepts.find((concept) => concept.id === conceptId)?.label
+            || question.topic
+            || "this concept";
+    };
+
+    const appendRichText = (
+        parent: HTMLElement,
+        text: string,
+        terms: LearningReviewTerm[] = [],
+    ) => {
+        const usableTerms = terms
+            .filter((term) => term.term.trim() && term.expansion.trim())
+            .sort((a, b) => b.term.length - a.term.length);
+
+        if (!usableTerms.length) {
+            parent.append(document.createTextNode(text));
+            return;
+        }
+
+        const escaped = usableTerms.map((term) => term.term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "g");
+        const byTerm = new Map(usableTerms.map((term) => [term.term, term]));
+        let cursor = 0;
+
+        for (const match of text.matchAll(pattern)) {
+            const index = match.index ?? 0;
+            if (index > cursor) parent.append(document.createTextNode(text.slice(cursor, index)));
+            const term = byTerm.get(match[0]);
+            if (term) {
+                const abbr = document.createElement("abbr");
+                abbr.className = "initialism-help";
+                abbr.tabIndex = 0;
+                abbr.textContent = term.term;
+                abbr.title = `${term.expansion}: ${term.definition}`;
+                abbr.dataset.tooltip = `${term.expansion} — ${term.definition}`;
+                abbr.setAttribute("aria-label", `${term.term}: ${term.expansion}. ${term.definition}`);
+                parent.append(abbr);
+            } else {
+                parent.append(document.createTextNode(match[0]));
+            }
+            cursor = index + match[0].length;
+        }
+
+        if (cursor < text.length) parent.append(document.createTextNode(text.slice(cursor)));
+    };
+
+    const appendSourceAndFeedback = (question: (typeof questions)[number], review: HTMLElement) => {
+        const draft = getDraft(question.id);
+
+        if (draft?.sourceEvidence?.excerpt) {
+            const source = document.createElement("details");
+            source.className = "source-evidence";
+            const sourceSummary = document.createElement("summary");
+            sourceSummary.textContent = "Source evidence";
+            const reference = document.createElement("p");
+            const strong = document.createElement("strong");
+            strong.textContent = draft.sourceEvidence.reference || draft.sourceReference;
+            reference.append(strong);
+            if (draft.sourceEvidence.locator) reference.append(document.createTextNode(` · ${draft.sourceEvidence.locator}`));
+            const excerpt = document.createElement("blockquote");
+            excerpt.textContent = draft.sourceEvidence.excerpt;
+            source.append(sourceSummary, reference, excerpt);
+            review.append(source);
+        }
+
+        const feedback = document.createElement("div");
+        feedback.className = "progress-actions";
+        const reason = document.createElement("select");
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "Optional reason";
+        reason.append(blank);
+        QUESTION_FEEDBACK_REASONS.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = formatReason(value);
+            reason.append(option);
+        });
+
+        const flag = document.createElement("button");
+        flag.type = "button";
+        flag.className = "secondary-button";
+        flag.textContent = "Flag question";
+        const confirmation = document.createElement("span");
+        confirmation.setAttribute("aria-live", "polite");
+        let activeFeedback: QuestionFeedback | null = null;
+
+        flag.addEventListener("click", async () => {
+            if (activeFeedback) {
+                const removing = activeFeedback;
+                removeQuestionFeedback(removing);
+                activeFeedback = null;
+                flag.textContent = "Flag question";
+                reason.disabled = false;
+                confirmation.textContent = " Flag removed.";
+                await unsyncQuestionFeedback(removing);
+                return;
+            }
+
+            const selectedReason = reason.value as QuestionFeedbackReason | "";
+            const saved = saveQuestionFeedback({
+                questionId: question.id,
+                questionVersion: question.version ?? 1,
+                ...(question.semanticKey ? { semanticKey: question.semanticKey } : {}),
+                ...(selectedReason ? { reason: selectedReason } : {}),
+                ...(question.topic ? { topic: question.topic } : {}),
+                ...(question.masteryConcept ? { masteryConcept: question.masteryConcept } : {}),
+                ...(question.learningObjective ? { learningObjective: question.learningObjective } : {}),
+                ...(question.learningStage ? { learningStage: question.learningStage } : {}),
+            });
+            activeFeedback = saved;
+            flag.textContent = "Remove flag";
+            reason.disabled = true;
+            confirmation.textContent = " Flagged.";
+            await syncQuestionFeedback(saved);
+        });
+
+        feedback.append(flag, reason, confirmation);
+        review.append(feedback);
+    };
+
+    const renderLearningReview = (
+        card: HTMLElement,
+        learningReview: LearningReview,
+        sourceReference: string,
+        sourceExcerpt: string,
+    ) => {
+        card.replaceChildren();
+
+        const heading = document.createElement("h3");
+        heading.textContent = learningReview.title;
+        const keyIdea = document.createElement("p");
+        keyIdea.className = "learning-review-key-idea";
+        appendRichText(keyIdea, learningReview.keyIdea, learningReview.keyTerms);
+        card.append(heading, keyIdea);
+
+        if (learningReview.clues.length) {
+            const clueHeading = document.createElement("h4");
+            clueHeading.textContent = "Why the clues matter";
+            const clueList = document.createElement("dl");
+            clueList.className = "learning-review-clues";
+            learningReview.clues.forEach((item) => {
+                const term = document.createElement("dt");
+                appendRichText(term, item.clue, learningReview.keyTerms);
+                const explanation = document.createElement("dd");
+                appendRichText(explanation, item.explanation, learningReview.keyTerms);
+                clueList.append(term, explanation);
+            });
+            card.append(clueHeading, clueList);
+        }
+
+        if (learningReview.memoryHook) {
+            const memory = document.createElement("p");
+            memory.className = "learning-review-memory";
+            const label = document.createElement("strong");
+            label.textContent = "Remember: ";
+            memory.append(label);
+            appendRichText(memory, learningReview.memoryHook, learningReview.keyTerms);
+            card.append(memory);
+        }
+
+        if (sourceExcerpt) {
+            const source = document.createElement("details");
+            source.className = "learning-review-source";
+            source.open = true;
+            const summary = document.createElement("summary");
+            summary.textContent = "Read the supporting excerpt";
+            const reference = document.createElement("p");
+            reference.className = "learning-review-reference";
+            reference.textContent = sourceReference;
+            const quote = document.createElement("blockquote");
+            appendRichText(quote, sourceExcerpt, learningReview.keyTerms);
+            source.append(summary, reference, quote);
+            card.append(source);
+        }
+
+        const check = learningReview.quickCheck;
+        if (check?.options?.length === 2) {
+            const quick = document.createElement("section");
+            quick.className = "learning-quick-check";
+            const title = document.createElement("h4");
+            title.textContent = "Quick check";
+            const prompt = document.createElement("p");
+            appendRichText(prompt, check.prompt, learningReview.keyTerms);
+            const optionHost = document.createElement("div");
+            optionHost.className = "learning-check-options";
+            const feedback = document.createElement("p");
+            feedback.className = "learning-check-feedback";
+            feedback.setAttribute("aria-live", "polite");
+
+            check.options.forEach((option) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "learning-check-option";
+                appendRichText(button, option.text, learningReview.keyTerms);
+                button.addEventListener("click", () => {
+                    optionHost.querySelectorAll<HTMLButtonElement>("button").forEach((item) => {
+                        item.disabled = true;
+                    });
+                    button.dataset.result = option.correct ? "correct" : "incorrect";
+                    feedback.textContent = option.feedback;
+                }, { once: true });
+                optionHost.append(button);
+            });
+
+            quick.append(title, prompt, optionHost, feedback);
+            card.append(quick);
+        }
+
+        if (learningReview.keyTerms.length) {
+            const note = document.createElement("p");
+            note.className = "initialism-note";
+            note.textContent = "Tip: hover, tap, or keyboard-focus underlined initialisms for a definition.";
+            card.append(note);
+        }
+    };
+
+    const appendLearningReview = async (
+        question: (typeof questions)[number],
+        selectedAnswer: string,
+        container: HTMLElement,
+        autoLoad: boolean,
+    ) => {
+        const draft = getDraft(question.id);
+        const correctAnswer = question.answers.find((item) => item.correct)?.text;
+        if (!draft?.sourceEvidence?.excerpt || !correctAnswer) return;
+
+        const wrapper = document.createElement("section");
+        wrapper.className = "learning-review-card";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary-button learning-review-button";
+        button.textContent = autoLoad ? "Loading concept review…" : "Review this concept";
+        const card = document.createElement("div");
+        card.className = "learning-review-content";
+        card.hidden = !autoLoad;
+        wrapper.append(button, card);
+        container.append(wrapper);
+
+        let loading = false;
+        const load = async () => {
+            if (loading) return;
+            const cached = learningReviewCache.get(question.id);
+            if (cached) {
+                card.hidden = false;
+                button.hidden = true;
+                renderLearningReview(
+                    card,
+                    cached,
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    draft.sourceEvidence.excerpt,
+                );
+                return;
+            }
+
+            if (!isLearningReviewConfigured()) {
+                card.hidden = false;
+                button.hidden = true;
+                const heading = document.createElement("h3");
+                heading.textContent = `Review: ${getConceptLabel(question)}`;
+                const explanation = document.createElement("p");
+                explanation.textContent = question.explanation || "Review the source excerpt before continuing.";
+                const quote = document.createElement("blockquote");
+                quote.textContent = draft.sourceEvidence.excerpt;
+                card.replaceChildren(heading, explanation, quote);
+                return;
+            }
+
+            loading = true;
+            button.disabled = true;
+            button.textContent = "Loading concept review…";
+            card.hidden = false;
+            card.textContent = "Building a short source-grounded review…";
+
+            try {
+                const learningReview = await generateLearningReview({
+                    prompt: question.prompt,
+                    correctAnswer,
+                    selectedAnswer,
+                    explanation: question.explanation,
+                    sourceReference: `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    sourceExcerpt: draft.sourceEvidence.excerpt,
+                    conceptLabel: getConceptLabel(question),
+                });
+                learningReviewCache.set(question.id, learningReview);
+                button.hidden = true;
+                renderLearningReview(
+                    card,
+                    learningReview,
+                    `${draft.sourceEvidence.reference || draft.sourceReference}${draft.sourceEvidence.locator ? ` · ${draft.sourceEvidence.locator}` : ""}`,
+                    draft.sourceEvidence.excerpt,
+                );
+            } catch (error) {
+                button.disabled = false;
+                button.textContent = "Retry concept review";
+                card.textContent = error instanceof Error
+                    ? `Could not build the enhanced review: ${error.message}`
+                    : "Could not build the enhanced review.";
+            } finally {
+                loading = false;
+            }
+        };
+
+        button.addEventListener("click", load);
+        if (autoLoad) await load();
+    };
+
+    const renderQuestion = () => {
+        if (!host) return;
+        answered = false;
+        if (actions) actions.hidden = true;
+        const question = questions[current];
+        const meta = document.createElement("p");
+        meta.textContent = `Question ${current + 1} of ${questions.length} · Score ${score}/${current}`;
+        const heading = document.createElement("h2");
+        heading.textContent = question.prompt;
+        const answerList = document.createElement("div");
+        answerList.className = "answers";
+        const review = document.createElement("div");
+        review.className = "review";
+        review.hidden = true;
+
+        question.answers.forEach((answer) => {
+            const label = document.createElement("label");
+            label.className = "answer-option";
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = `runtime-${question.id}`;
+            input.value = answer.id;
+            const text = document.createElement("span");
+            text.textContent = answer.text;
+            label.append(input, text);
+            answerList.append(label);
+
+            input.addEventListener("change", async () => {
+                if (answered) return;
+                answered = true;
+                const correct = answer.correct;
+                if (correct) score += 1;
+                label.dataset.result = correct ? "correct" : "incorrect";
+                const correctAnswer = question.answers.find((item) => item.correct);
+                answerList.querySelectorAll<HTMLInputElement>("input").forEach((item) => {
+                    item.disabled = true;
+                    if (!correct && correctAnswer && item.value === correctAnswer.id) {
+                        item.closest<HTMLElement>(".answer-option")?.setAttribute("data-result", "correct");
+                    }
+                });
+
+                const result = document.createElement("p");
+                result.textContent = correct ? "Correct." : "Not quite.";
+                review.replaceChildren(result);
+                if (!correct && correctAnswer) {
+                    const correction = document.createElement("p");
+                    const strong = document.createElement("strong");
+                    strong.textContent = "Correct answer: ";
+                    correction.append(strong, document.createTextNode(correctAnswer.text));
+                    review.append(correction);
+                }
+                const explanationText = question.explanation || answer.feedback;
+                if (explanationText) {
+                    const explanation = document.createElement("p");
+                    explanation.textContent = explanationText;
+                    review.append(explanation);
+                }
+
+                await appendLearningReview(question, answer.text, review, !correct);
+                appendSourceAndFeedback(question, review);
+                review.hidden = false;
+
+                savePracticeAttempt({
+                    questionId: question.id,
+                    answerId: answer.id,
+                    correct,
+                    answeredAt: new Date().toISOString(),
+                    sessionId,
+                    ...(stored && {
+                        curriculumId: stored.curriculum.id,
+                        curriculumTitle: stored.curriculum.title,
+                    }),
+                    ...(question.topic && { topic: question.topic }),
+                    ...(question.concepts?.length && { concepts: question.concepts }),
+                    ...(question.masteryConcept && { masteryConcept: question.masteryConcept }),
+                    ...(question.difficulty && { difficulty: question.difficulty }),
+                    ...(question.learningStage && { learningStage: question.learningStage }),
+                });
+                if (actions) actions.hidden = false;
+                if (next) next.textContent = current === questions.length - 1 ? "Finish session" : "Next question";
+            });
+        });
+
+        host.replaceChildren(meta, heading, answerList, review);
+    };
+
+    if (!stored) {
+        setInfo("No imported curriculum", "Save a valid curriculum package from the importer first.");
+        if (host) host.textContent = "Nothing to practice yet.";
+    } else if (!questions.length) {
+        setInfo(stored.curriculum.title, "This curriculum has no practice-ready questions yet.");
+        if (host) host.textContent = "Generate AI-validated questions or add an approved question first.";
+    } else {
+        setInfo(stored.curriculum.title, `${questions.length} practice-ready question${questions.length === 1 ? "" : "s"} loaded from this browser.`);
+        renderQuestion();
+    }
+
+    next?.addEventListener("click", () => {
+        if (!answered || !stored) return;
+        if (current === questions.length - 1) {
+            if (host) host.replaceChildren();
+            if (actions) actions.hidden = true;
+            if (complete) complete.hidden = false;
+            if (finalScore) finalScore.textContent = String(score);
+            if (finalTotal) finalTotal.textContent = String(questions.length);
+            saveSessionSummary({
+                id: sessionId,
+                mode: `Curriculum · ${stored.curriculum.title}`,
+                requestedLength: "all",
+                startedAt,
+                completedAt: new Date().toISOString(),
+                questionCount: questions.length,
+                answeredCount: questions.length,
+                correctCount: score,
+                curriculumId: stored.curriculum.id,
+                curriculumTitle: stored.curriculum.title,
+            });
+            return;
+        }
+        current += 1;
+        renderQuestion();
+    });
+</script>

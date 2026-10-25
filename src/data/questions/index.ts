@@ -11,6 +11,7 @@ import { apiBasicsQuestions } from "./api-auth";
 import { codeDataQuestions } from "./code-data";
 import { aiIndustryQuestions } from "./ai-industry";
 import { interviewApplicationQuestions } from "./interview-application";
+import { compiledCurriculumQuestions } from "../curriculum";
 
 export const allQuestions = [
     ...automationBasicsQuestions,
@@ -18,4 +19,5 @@ export const allQuestions = [
     ...codeDataQuestions,
     ...aiIndustryQuestions,
     ...interviewApplicationQuestions,
+    ...compiledCurriculumQuestions,
 ];

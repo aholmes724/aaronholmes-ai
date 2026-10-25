@@ -1,6 +1,7 @@
 ---
 import type { Question } from "../data/questions";
 import { getLearningObjective } from "../data/questions/learning-objectives";
+import QuestionFeedback from "./QuestionFeedback.astro";
 
 interface Props {
     question: Question;
@@ -12,11 +13,21 @@ const learningObjective = getLearningObjective(
     question.id,
     question.learningObjective,
 );
+const semanticKey =
+    question.semanticKey ??
+    [question.masteryConcept, learningObjective]
+        .filter(Boolean)
+        .join("::")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
 ---
 
 <section
     class="quiz-question"
     data-question-id={question.id}
+    data-question-version={question.version ?? 1}
+    data-semantic-key={semanticKey || undefined}
     data-topic={question.topic}
     data-concepts={question.concepts?.join(",")}
     data-difficulty={question.difficulty}
@@ -56,6 +67,7 @@ const learningObjective = getLearningObjective(
         </p>
 
         <p class="feedback"></p>
+        <QuestionFeedback />
     </div>
 
     <button class="try-again" type="button" hidden> Try again </button>
@@ -140,7 +152,6 @@ const learningObjective = getLearningObjective(
                 result.textContent = isCorrect ? "Correct." : "Not quite.";
 
                 const canonicalExplanation = quiz.dataset.explanation?.trim();
-
                 feedback.textContent = canonicalExplanation || "";
 
                 if (
@@ -182,26 +193,11 @@ const learningObjective = getLearningObjective(
                 }
             });
 
-            if (review) {
-                review.hidden = true;
-            }
-
-            if (result) {
-                result.textContent = "";
-            }
-
-            if (feedback) {
-                feedback.textContent = "";
-            }
-
-            if (correctAnswerRow) {
-                correctAnswerRow.hidden = true;
-            }
-
-            if (correctAnswerText) {
-                correctAnswerText.textContent = "";
-            }
-
+            if (review) review.hidden = true;
+            if (result) result.textContent = "";
+            if (feedback) feedback.textContent = "";
+            if (correctAnswerRow) correctAnswerRow.hidden = true;
+            if (correctAnswerText) correctAnswerText.textContent = "";
             tryAgain.hidden = true;
         });
     });

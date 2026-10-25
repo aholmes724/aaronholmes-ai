@@ -1,0 +1,74 @@
+.lesson-glossary-term {
+  position: relative;
+  display: inline;
+  padding: 0 0.08em;
+  border-radius: 0.18rem;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 650;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.18em;
+  cursor: help;
+}
+
+.lesson-glossary-term.glossary-high {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.lesson-glossary-popover {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  bottom: calc(100% + 0.5rem);
+  width: min(24rem, 82vw);
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-decoration: none;
+  box-shadow: 0 0.5rem 1.25rem rgb(0 0 0 / 24%);
+  white-space: normal;
+}
+
+.lesson-glossary-term:hover > .lesson-glossary-popover,
+.lesson-glossary-term:focus > .lesson-glossary-popover,
+.lesson-glossary-term:focus-within > .lesson-glossary-popover {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.glossary-popover-title,
+.glossary-popover-body,
+.glossary-popover-why {
+  display: block;
+}
+
+.glossary-popover-title {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.glossary-popover-why {
+  color: var(--text-muted);
+}
+
+.lesson-glossary-popover strong {
+  font-weight: 750;
+  color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .lesson-glossary-popover {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    width: auto;
+    max-height: 45vh;
+    overflow: auto;
+  }
+}
