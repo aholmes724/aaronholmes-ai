@@ -32,9 +32,9 @@ import Layout from "../layouts/Layout.astro";
       <p class="section-label">Selected work</p>
       <h2>Complex problems. Practical solutions.</h2>
       <p class="section-intro">
-        A few examples of the systems, integrations and products I have helped
-        build, support and improve. Client details are summarized to protect
-        private information and proprietary workflows.
+        A few examples of the systems, business rules, integrations and products
+        I have helped define, test, build and support. Client details are
+        summarized to protect private information and proprietary workflows.
       </p>
       <div class="project-grid">
         <article class="project-card">
@@ -54,10 +54,10 @@ import Layout from "../layouts/Layout.astro";
           <p class="project-kicker">Custom API integration</p>
           <h2>Healthcare Eligibility and Verification</h2>
           <p>
-            Built a multi-endpoint pVerify REST integration connecting eligibility
-            and verification services with CRM workflows. Handled authentication,
-            requests, response mapping, patient and payer data normalization,
-            exceptions and cross-platform troubleshooting.
+            Built a multi-endpoint pVerify REST integration in Zapier using bearer-token
+            request authentication, JSON response mapping, normalization and CRM
+            updates. Automated routine eligibility verification, with an estimated
+            10 minutes of manual effort avoided per routine record.
           </p>
           <p class="project-tech">REST APIs · JSON · Authentication · Zapier · Zoho CRM</p>
         </article>
@@ -66,12 +66,25 @@ import Layout from "../layouts/Layout.astro";
           <p class="project-kicker">Data integrity and business rules</p>
           <h2>Centralized Duplicate Processing</h2>
           <p>
-            Redesigned scattered duplicate checks into centralized logic covering
-            patient matching, product and stage conditions, supplier and owner
-            routing, exceptions and a 30-day window. Audited approximately 300
-            recent records to identify and correct inconsistent results.
+            Worked with the COO to translate duplicate-handling and branch ownership
+            requirements into auditable centralized Deluge rules. Used a 30-day
+            window, request-status conditions and controlled spreadsheet test cases
+            to validate combinations without disturbing production.
           </p>
-          <p class="project-tech">Deluge · CRM Automation · Data Reconciliation · Testing</p>
+          <p class="project-tech">Requirements · Deluge · Business Rules · Controlled Testing</p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">Production recovery and validation</p>
+          <h2>Branch Routing and Data Quality Recovery</h2>
+          <p>
+            Traced branch and owner misrouting to upstream Zoho Flow intake
+            defects after an estimated 500–600 leads were affected over about
+            two months. Corrected routing, added exception alerts and reviewed
+            more than 300 new and historical records with leadership over
+            approximately one week after the fix.
+          </p>
+          <p class="project-tech">Zoho Flow · Root-Cause Analysis · Exception Alerts · Record Validation</p>
         </article>
 
         <article class="project-card">
@@ -96,6 +109,19 @@ import Layout from "../layouts/Layout.astro";
             and deal-document generation.
           </p>
           <p class="project-tech">Data Integration · Business Rules · WordPress · Document Automation</p>
+        </article>
+
+        <article class="project-card">
+          <p class="project-kicker">Support enablement and continuity</p>
+          <h2>Documenting and Transferring Automation Ownership</h2>
+          <p>
+            Trained a colleague to independently maintain Zoho and Zapier
+            automations, with documentation and practical handoffs covering
+            intake, product logic and troubleshooting. This contributed to an
+            estimated 10+ team hours each week in reduced support,
+            escalations and troubleshooting.
+          </p>
+          <p class="project-tech">Documentation · Training · Knowledge Transfer · Production Support</p>
         </article>
 
         <article class="project-card">
@@ -145,18 +171,19 @@ import Layout from "../layouts/Layout.astro";
           <p class="role-meta">Sep 2025–Aug 2026 · Remote</p>
         </div>
         <p class="role-summary">
-          Became the primary hands-on technical resource for a largely undocumented
-          healthcare automation environment spanning more than 400 CRM workflows,
-          around 150 existing custom functions and hundreds of Zapier automations.
-          The systems supported intake, eligibility, prescriptions, medical
-          records, documentation, orders, fax and customer communications.
+          Partnered with the COO on requirements and operational business rules,
+          then developed, tested and supported integrations and data-quality
+          workflows across a complex healthcare operation. Also served as a
+          primary hands-on resource for an inherited environment of 400+ CRM
+          workflows, about 150 existing Deluge functions and hundreds of
+          Zapier automations.
         </p>
         <ul class="experience-list">
-          <li>Built a custom multi-endpoint pVerify REST API integration for insurance and patient verification, including authentication, data normalization, CRM mapping and error investigation.</li>
-          <li>Redesigned duplicate-processing and data reconciliation logic; audited roughly 300 production records following rollout.</li>
-          <li>Mapped intake variations across three operating locations, coordinating product, supplier, owner and exception rules across Zoho CRM, Sheets, Survey and Flow.</li>
-          <li>Led systems implementation for a compression-garment product line, from intake and CRM workflows through documentation and order processing.</li>
-          <li>Diagnosed cross-system failures with execution logs and record tracing, identified costly redundant processing, improved support documentation and trained a colleague in ongoing maintenance.</li>
+          <li>Worked with the COO to define duplicate-detection, branch ownership and supplier-routing requirements; built auditable 30-day and request-status rules in Deluge and validated combinations with controlled spreadsheet test cases.</li>
+          <li>Diagnosed and corrected upstream Zoho Flow routing defects after an estimated 500–600 leads were affected; added exception alerts and reviewed 300+ new and historical records with leadership during approximately one week of post-fix validation.</li>
+          <li>Built a custom multi-endpoint pVerify REST integration in Zapier with bearer-token authentication, JSON mapping, normalization and CRM updates, avoiding an estimated 10 minutes of manual staff effort per routine verification.</li>
+          <li>Trained a colleague to support Zoho and Zapier independently; documentation and handoffs contributed to an estimated 10+ hours per week in reduced team troubleshooting, escalation and support effort.</li>
+          <li>Connected Zoho Survey, Sheets, Flow, CRM, HCPCS/product logic, documents and orders across different compression-garment intake processes; analyzed cross-system issues and automation cost.</li>
         </ul>
       </div>
 
@@ -208,11 +235,11 @@ import Layout from "../layouts/Layout.astro";
       <div class="skills-grid">
         <div>
           <h2>Business Systems and Delivery</h2>
-          <p>Requirements Discovery · Systems Analysis · Process Mapping · Technical Implementation · SaaS Onboarding · Solution Design · Customer Training · Vendor Coordination</p>
+          <p>Requirements Discovery · Business-Rule Development · Process Mapping · Solution Design · Process Improvement · SaaS Onboarding · Customer Training · Stakeholder and Vendor Coordination</p>
         </div>
         <div>
           <h2>Automation and Integrations</h2>
-          <p>REST APIs · Webhooks · JSON · API Authentication · Data Mapping · Workflow Automation · Orchestration · Deluge · Custom Functions</p>
+          <p>REST APIs · Webhooks · JSON · Bearer Tokens · CRM Field Mapping · Data Normalization · Workflow Architecture · Deluge · Zoho COQL · Custom Functions</p>
         </div>
         <div>
           <h2>Programming and Cloud</h2>
@@ -220,11 +247,11 @@ import Layout from "../layouts/Layout.astro";
         </div>
         <div>
           <h2>Platforms and Services</h2>
-          <p>Zoho CRM and Zoho One · Zoho Flow · Zapier · pVerify · PandaDoc · Phaxio · Telnyx · Google Workspace · WordPress</p>
+          <p>Zoho CRM and Zoho One · Zoho Flow · Zoho Survey · Zapier · pVerify · PandaDoc · Phaxio · Telnyx · Sinch · Google Sheets and Excel · WordPress</p>
         </div>
         <div>
           <h2>Production Reliability</h2>
-          <p>Integration Troubleshooting · Root-Cause Analysis · Logging · Exception Handling · Data Quality · Deduplication · Documentation · SOPs</p>
+          <p>Production Troubleshooting · Root-Cause Analysis · Logs and Exception Alerts · Controlled Spreadsheet Testing · Data Validation and Reconciliation · Deduplication · Dependency Documentation · Automation Cost Analysis</p>
         </div>
         <div>
           <h2>AI and Developer Tools</h2>
@@ -243,9 +270,9 @@ import Layout from "../layouts/Layout.astro";
         without creating another one.
       </p>
       <p>
-        Just as important is what happens after launch: tracing failures,
-        improving usability, documenting decisions and leaving a system that
-        other people can maintain.
+        Just as important is what happens after launch: validating the actual
+        results, monitoring exceptions, tracing failures, documenting decisions
+        and leaving a system that other people can maintain.
       </p>
     </section>
 
